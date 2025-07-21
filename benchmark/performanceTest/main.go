@@ -24,6 +24,7 @@ import (
 
 	"github.com/awslabs/soci-snapshotter/benchmark"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kernel"
 	bparser "github.com/awslabs/soci-snapshotter/benchmark/framework/parser"
 )
 
@@ -38,11 +39,14 @@ func main() {
 		jsonFile                string
 		showCom                 bool
 		parseFileAccessPatterns bool
+		traceKernelFileAccess   bool
+		kernelFileTraceDir      string
 		commit                  string
 		imageList               []benchmark.ImageDescriptor
 		err                     error
 	)
 
+	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
 	flag.BoolVar(&parseFileAccessPatterns, "parse-file-access", false, "Parse fuse file access patterns.")
 	flag.BoolVar(&showCom, "show-commit", false, "tag the commit hash to the benchmark results")
 	flag.IntVar(&numberOfTests, "count", 5, "Describes the number of runs a benchmarker should run. Default: 5")
@@ -63,6 +67,18 @@ func main() {
 			panic(err)
 		}
 		err = os.MkdirAll(fileAccessDir, 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if traceKernelFileAccess {
+		kernelFileTraceDir = outputDir + "/kernel_file_trace_logs"
+		err := os.RemoveAll(kernelFileTraceDir)
+		if err != nil {
+			panic(err)
+		}
+		err = os.MkdirAll(kernelFileTraceDir, 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -100,15 +116,31 @@ func main() {
 			TestName:      testName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B) {
+				err := kernel.StartTrace(kernelFileTraceDir)
+				if err != nil {
+					panic(err)
+				}
 				benchmark.SociFullRun(ctx, b, testName, image)
+				err = kernel.StopTrace()
+				if err != nil {
+					panic(err)
+				}
 			},
 		}
+
 		if parseFileAccessPatterns {
-			driver.AfterFunction = func() error {
+			driver.AfterFunctions = append(driver.AfterFunctions, func() error {
 				err := bparser.ParseFileAccesses(shortName)
 				return err
-			}
+			})
 		}
+
+		// if traceKernelFileAccess {
+		// 	driver.AfterFunctions = kernel.ParseFileAccesses(driver.AfterFunctions, func() error {
+		// 		return err
+		// 	})
+		// }
+
 		drivers = append(drivers, driver)
 	}
 

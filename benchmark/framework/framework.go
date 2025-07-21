@@ -53,17 +53,17 @@ type BenchmarkTestStats struct {
 }
 
 type BenchmarkTestDriver struct {
-	TestName       string             `json:"testName"`
-	NumberOfTests  int                `json:"numberOfTests"`
-	BeforeFunction func()             `json:"-"`
-	TestFunction   func(*testing.B)   `json:"-"`
-	AfterFunction  func() error       `json:"-"`
-	TestsRun       int                `json:"-"`
-	FullRunStats   BenchmarkTestStats `json:"fullRunStats"`
-	PullStats      BenchmarkTestStats `json:"pullStats"`
-	UnpackStats    BenchmarkTestStats `json:"unpackStats"`
-	LazyTaskStats  BenchmarkTestStats `json:"lazyTaskStats"`
-	LocalTaskStats BenchmarkTestStats `json:"localTaskStats"`
+	TestName        string             `json:"testName"`
+	NumberOfTests   int                `json:"numberOfTests"`
+	BeforeFunctions []func() error     `json:"-"`
+	TestFunction    func(*testing.B)   `json:"-"`
+	AfterFunctions  []func() error     `json:"-"`
+	TestsRun        int                `json:"-"`
+	FullRunStats    BenchmarkTestStats `json:"fullRunStats"`
+	PullStats       BenchmarkTestStats `json:"pullStats"`
+	UnpackStats     BenchmarkTestStats `json:"unpackStats"`
+	LazyTaskStats   BenchmarkTestStats `json:"lazyTaskStats"`
+	LocalTaskStats  BenchmarkTestStats `json:"localTaskStats"`
 }
 
 func (frame *BenchmarkFramework) Run(ctx context.Context) {
@@ -73,9 +73,15 @@ func (frame *BenchmarkFramework) Run(ctx context.Context) {
 	for i := 0; i < len(frame.Drivers); i++ {
 		testDriver := &frame.Drivers[i]
 		fmt.Printf("Running tests for %s\n", testDriver.TestName)
-		if testDriver.BeforeFunction != nil {
-			testDriver.BeforeFunction()
+
+		if testDriver.BeforeFunctions != nil {
+			for _, beforeFunc := range testDriver.BeforeFunctions {
+				if err := beforeFunc(); err != nil {
+					fmt.Printf("Before function error: %v\n", err)
+				}
+			}
 		}
+
 		for j := 0; j < testDriver.NumberOfTests; j++ {
 			log.G(ctx).WithField("test_name", testDriver.TestName).Infof("TestStart for %s_%d", testDriver.TestName, j+1)
 			fmt.Printf("Running test %d of %d\n", j+1, testDriver.NumberOfTests)
@@ -87,10 +93,13 @@ func (frame *BenchmarkFramework) Run(ctx context.Context) {
 			testDriver.LocalTaskStats.BenchmarkTimes = append(testDriver.LocalTaskStats.BenchmarkTimes, res.Extra["localTaskStats"]/1000)
 		}
 		testDriver.calculateStats()
-		if testDriver.AfterFunction != nil {
-			err := testDriver.AfterFunction()
-			if err != nil {
-				fmt.Printf("After function error: %v\n", err)
+
+		if testDriver.AfterFunctions != nil {
+			for _, afterFunc := range testDriver.AfterFunctions {
+				if err := afterFunc(); err != nil {
+					fmt.Printf("After function error: %v\n", err)
+
+				}
 			}
 		}
 	}
