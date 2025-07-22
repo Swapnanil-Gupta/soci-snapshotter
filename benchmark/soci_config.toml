@@ -9,4 +9,4 @@
   log_fuse_operations = true
 
 [content_store]
-containerd_address="/tmp/containerd-grpc/containerd.sock"
+  containerd_address="/tmp/containerd-grpc/containerd.sock"

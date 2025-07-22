@@ -24,7 +24,7 @@ import (
 
 	"github.com/awslabs/soci-snapshotter/benchmark"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
-	"github.com/awslabs/soci-snapshotter/benchmark/framework/kernel"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 	bparser "github.com/awslabs/soci-snapshotter/benchmark/framework/parser"
 )
 
@@ -82,6 +82,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		kerneltrace.Enable()
 	}
 
 	if jsonFile == "default" {
@@ -116,15 +117,7 @@ func main() {
 			TestName:      testName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B) {
-				err := kernel.StartTrace(kernelFileTraceDir)
-				if err != nil {
-					panic(err)
-				}
 				benchmark.SociFullRun(ctx, b, testName, image)
-				err = kernel.StopTrace()
-				if err != nil {
-					panic(err)
-				}
 			},
 		}
 
@@ -135,11 +128,12 @@ func main() {
 			})
 		}
 
-		// if traceKernelFileAccess {
-		// 	driver.AfterFunctions = kernel.ParseFileAccesses(driver.AfterFunctions, func() error {
-		// 		return err
-		// 	})
-		// }
+		if traceKernelFileAccess {
+			driver.AfterFunctions = append(driver.AfterFunctions, func() error {
+				err := kerneltrace.Parse(kernelFileTraceDir, testName, numberOfTests)
+				return err
+			})
+		}
 
 		drivers = append(drivers, driver)
 	}

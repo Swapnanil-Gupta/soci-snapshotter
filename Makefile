@@ -221,11 +221,11 @@ benchmark/bin/CompTests: FORCE
 
 benchmarks-perf-test: benchmark/bin/PerfTests
 	@echo "$@"
-	@cd benchmark/performanceTest ; sudo ../bin/PerfTests -show-commit $(BENCHMARK_FLAGS)
+	@cd benchmark/performanceTest ; sudo ../bin/PerfTests -trace-kernel-file-access -parse-file-access -show-commit $(BENCHMARK_FLAGS)
 
 benchmarks-comparison-test: benchmark/bin/CompTests
 	@echo "$@"
-	@cd benchmark/comparisonTest ; sudo ../bin/CompTests $(BENCHMARK_FLAGS)
+	@cd benchmark/comparisonTest ; sudo ../bin/CompTests -trace-kernel-file-access $(BENCHMARK_FLAGS)
 
 benchmarks-stargz:
 	@echo "$@"

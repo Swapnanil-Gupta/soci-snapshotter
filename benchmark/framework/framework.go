@@ -98,7 +98,6 @@ func (frame *BenchmarkFramework) Run(ctx context.Context) {
 			for _, afterFunc := range testDriver.AfterFunctions {
 				if err := afterFunc(); err != nil {
 					fmt.Printf("After function error: %v\n", err)
-
 				}
 			}
 		}

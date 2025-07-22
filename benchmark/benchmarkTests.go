@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 	"github.com/containerd/containerd"
 	"github.com/containerd/log"
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ import (
 
 var (
 	outputDir              = "./output"
+	kernelFileTraceDir     = outputDir + "/kernel_file_trace_logs"
 	containerdAddress      = "/tmp/containerd-grpc/containerd.sock"
 	containerdRoot         = "/tmp/lib/containerd"
 	containerdState        = "/tmp/containerd"
@@ -105,6 +107,13 @@ func SociFullRun(
 	b *testing.B,
 	testName string,
 	imageDescriptor ImageDescriptor) {
+	// start first tracing
+	kerneltrace.ResetCounter()
+	kerneltrace.IncCounter()
+	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.FirstRun); err != nil {
+		panic(err)
+	}
+
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -158,6 +167,16 @@ func SociFullRun(
 	// We don't want this cleanup time included in the benchmark, though.
 	b.StopTimer()
 	cleanupRun()
+
+	// stop first tracing
+	if err := kerneltrace.Stop(); err != nil {
+		panic(err)
+	}
+	// start second tracing
+	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.SecondRun); err != nil {
+		panic(err)
+	}
+
 	b.StartTimer()
 	containerSecondRun, cleanupContainerSecondRun, err := sociContainerdProc.CreateSociContainer(ctx, image, imageDescriptor)
 	if err != nil {
@@ -181,6 +200,11 @@ func SociFullRun(
 	defer cleanupRunSecond()
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Stop").Infof("Stop Test")
 	b.StopTimer()
+
+	// stop second tracing
+	if err := kerneltrace.Stop(); err != nil {
+		panic(err)
+	}
 }
 
 func OverlayFSFullRun(
@@ -188,6 +212,13 @@ func OverlayFSFullRun(
 	b *testing.B,
 	testName string,
 	imageDescriptor ImageDescriptor) {
+	// start first tracing
+	kerneltrace.ResetCounter()
+	kerneltrace.IncCounter()
+	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.FirstRun); err != nil {
+		panic(err)
+	}
+
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -243,6 +274,16 @@ func OverlayFSFullRun(
 	// We don't want this cleanup time included in the benchmark, though.
 	b.StopTimer()
 	cleanupRun()
+
+	// stop first tracing
+	if err := kerneltrace.Stop(); err != nil {
+		panic(err)
+	}
+	// start second tracing
+	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.SecondRun); err != nil {
+		panic(err)
+	}
+
 	b.StartTimer()
 	containerSecondRun, cleanupContainerSecondRun, err := containerdProcess.CreateContainer(ctx, imageDescriptor.ContainerOpts(image)...)
 	if err != nil {
@@ -266,6 +307,11 @@ func OverlayFSFullRun(
 	defer cleanupRunSecond()
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Stop").Infof("Stop Test")
 	b.StopTimer()
+
+	// stop second tracing
+	if err := kerneltrace.Stop(); err != nil {
+		panic(err)
+	}
 }
 
 func StargzFullRun(

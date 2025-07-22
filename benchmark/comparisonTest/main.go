@@ -24,6 +24,7 @@ import (
 
 	"github.com/awslabs/soci-snapshotter/benchmark"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 )
 
 var (
@@ -33,14 +34,17 @@ var (
 func main() {
 
 	var (
-		numberOfTests int
-		jsonFile      string
-		showCom       bool
-		imageList     []benchmark.ImageDescriptor
-		err           error
-		commit        string
+		numberOfTests         int
+		jsonFile              string
+		showCom               bool
+		traceKernelFileAccess bool
+		kernelFileTraceDir    string
+		imageList             []benchmark.ImageDescriptor
+		err                   error
+		commit                string
 	)
 
+	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
 	flag.BoolVar(&showCom, "show-commit", false, "tag the commit hash to the benchmark results")
 	flag.IntVar(&numberOfTests, "count", 5, "Describes the number of runs a benchmarker should run. Default: 5")
 	flag.StringVar(&jsonFile, "f", "default", "Path to a json file describing image details in this order ['Name','Image ref', 'Ready line', 'manifest ref']")
@@ -51,6 +55,19 @@ func main() {
 		commit, _ = benchmark.GetCommitHash()
 	} else {
 		commit = "N/A"
+	}
+
+	if traceKernelFileAccess {
+		kernelFileTraceDir = outputDir + "/kernel_file_trace_logs"
+		err := os.RemoveAll(kernelFileTraceDir)
+		if err != nil {
+			panic(err)
+		}
+		err = os.MkdirAll(kernelFileTraceDir, 0755)
+		if err != nil {
+			panic(err)
+		}
+		kerneltrace.Enable()
 	}
 
 	if jsonFile == "default" {
@@ -80,20 +97,38 @@ func main() {
 	for _, image := range imageList {
 		image := image
 		shortName := image.ShortName
-		drivers = append(drivers, framework.BenchmarkTestDriver{
-			TestName:      "OverlayFSFull" + shortName,
+		overlayFsTestName := "OverlayFSFull" + shortName
+
+		overlayFsTestDriver := framework.BenchmarkTestDriver{
+			TestName:      overlayFsTestName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B) {
 				benchmark.OverlayFSFullRun(ctx, b, "OverlayFSFull"+shortName, image)
 			},
-		})
-		drivers = append(drivers, framework.BenchmarkTestDriver{
-			TestName:      "SociFull" + shortName,
+		}
+		if traceKernelFileAccess {
+			overlayFsTestDriver.AfterFunctions = append(overlayFsTestDriver.AfterFunctions, func() error {
+				err := kerneltrace.Parse(kernelFileTraceDir, overlayFsTestName, numberOfTests)
+				return err
+			})
+		}
+		drivers = append(drivers, overlayFsTestDriver)
+
+		sociTestName := "SociFull" + shortName
+		sociTestDriver := framework.BenchmarkTestDriver{
+			TestName:      sociTestName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B) {
 				benchmark.SociFullRun(ctx, b, "SociFull"+shortName, image)
 			},
-		})
+		}
+		if traceKernelFileAccess {
+			sociTestDriver.AfterFunctions = append(sociTestDriver.AfterFunctions, func() error {
+				err := kerneltrace.Parse(kernelFileTraceDir, sociTestName, numberOfTests)
+				return err
+			})
+		}
+		drivers = append(drivers, sociTestDriver)
 	}
 
 	benchmarks := framework.BenchmarkFramework{

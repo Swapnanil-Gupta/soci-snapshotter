@@ -485,7 +485,7 @@ def print_stats():
     
 # Function to export data
 def export_data():
-    if args.output and all_events:
+    if args.output:
         with open(args.output, 'w') as f:
             json.dump(all_events, f, indent=2)
         print(f"Exported {len(all_events)} events to {args.output}")
