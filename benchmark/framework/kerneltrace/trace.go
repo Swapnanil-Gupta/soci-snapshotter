@@ -46,16 +46,16 @@ func Start(monitorPath string, outputDir string, testName string, runType RunTyp
 		scriptPath,
 		monitorPath,
 		"--output="+getKernelTraceScriptOutPath(outputDir, testName, runNum, runType))
-	stdoutFile, err := os.Create(outputDir + "/kernel-trace-stdout")
-	if err != nil {
-		return err
-	}
-	stderrFile, err := os.Create(outputDir + "/kernel-trace-stderr")
-	if err != nil {
-		return err
-	}
-	traceCmd.Stdout = stdoutFile
-	traceCmd.Stderr = stderrFile
+	// stdoutFile, err := os.Create(outputDir + "/kernel-trace-stdout")
+	// if err != nil {
+	// 	return err
+	// }
+	// stderrFile, err := os.Create(outputDir + "/kernel-trace-stderr")
+	// if err != nil {
+	// 	return err
+	// }
+	traceCmd.Stdout = os.Stdout
+	traceCmd.Stderr = os.Stderr
 	if err := traceCmd.Start(); err != nil {
 		return err
 	}
