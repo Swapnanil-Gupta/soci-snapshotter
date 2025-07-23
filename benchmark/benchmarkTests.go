@@ -32,7 +32,6 @@ import (
 
 var (
 	outputDir              = "./output"
-	kernelFileTraceDir     = outputDir + "/kernel_file_trace_logs"
 	containerdAddress      = "/tmp/containerd-grpc/containerd.sock"
 	containerdRoot         = "/tmp/lib/containerd"
 	containerdState        = "/tmp/containerd"
@@ -107,11 +106,17 @@ func SociFullRun(
 	b *testing.B,
 	testName string,
 	imageDescriptor ImageDescriptor) {
-	// start first tracing
-	kerneltrace.ResetCounter()
-	kerneltrace.IncCounter()
-	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.FirstRun); err != nil {
-		panic(err)
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting first kernel trace")
+		kerneltrace.ResetCounter()
+		kerneltrace.IncCounter()
+		if err := kerneltrace.Start(containerdState, outputDir, testName, kerneltrace.FirstRun); err != nil {
+			fatalf(b, "Failed to start first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started first kernel trace")
+
+	} else {
+		log.G(ctx).Info("Kernel trace disabled")
 	}
 
 	testUUID := uuid.New().String()
@@ -168,13 +173,20 @@ func SociFullRun(
 	b.StopTimer()
 	cleanupRun()
 
-	// stop first tracing
-	if err := kerneltrace.Stop(); err != nil {
-		panic(err)
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Stopping first kernel trace")
+		if err := kerneltrace.Stop(); err != nil {
+			fatalf(b, "Failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Stopped first kernel trace")
 	}
-	// start second tracing
-	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.SecondRun); err != nil {
-		panic(err)
+
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting second kernel trace")
+		if err := kerneltrace.Start(containerdState, outputDir, testName, kerneltrace.SecondRun); err != nil {
+			fatalf(b, "Failed to start second kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started second kernel trace")
 	}
 
 	b.StartTimer()
@@ -201,9 +213,12 @@ func SociFullRun(
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Stop").Infof("Stop Test")
 	b.StopTimer()
 
-	// stop second tracing
-	if err := kerneltrace.Stop(); err != nil {
-		panic(err)
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Stopping second kernel trace")
+		if err := kerneltrace.Stop(); err != nil {
+			fatalf(b, "Failed to stop second kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Stopped second kernel trace")
 	}
 }
 
@@ -212,11 +227,16 @@ func OverlayFSFullRun(
 	b *testing.B,
 	testName string,
 	imageDescriptor ImageDescriptor) {
-	// start first tracing
-	kerneltrace.ResetCounter()
-	kerneltrace.IncCounter()
-	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.FirstRun); err != nil {
-		panic(err)
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting first kernel trace")
+		kerneltrace.ResetCounter()
+		kerneltrace.IncCounter()
+		if err := kerneltrace.Start(containerdState, outputDir, testName, kerneltrace.FirstRun); err != nil {
+			fatalf(b, "Failed to start first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started first kernel trace")
+	} else {
+		log.G(ctx).Info("Kernel trace disabled")
 	}
 
 	testUUID := uuid.New().String()
@@ -275,13 +295,20 @@ func OverlayFSFullRun(
 	b.StopTimer()
 	cleanupRun()
 
-	// stop first tracing
-	if err := kerneltrace.Stop(); err != nil {
-		panic(err)
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Stopping first kernel trace")
+		if err := kerneltrace.Stop(); err != nil {
+			fatalf(b, "Failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Stopped first kernel trace")
 	}
-	// start second tracing
-	if err := kerneltrace.Start(containerdState, kernelFileTraceDir, testName, kerneltrace.SecondRun); err != nil {
-		panic(err)
+
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting second kernel trace")
+		if err := kerneltrace.Start(containerdState, outputDir, testName, kerneltrace.SecondRun); err != nil {
+			fatalf(b, "Failed to start second kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started second kernel trace")
 	}
 
 	b.StartTimer()
@@ -308,9 +335,12 @@ func OverlayFSFullRun(
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Stop").Infof("Stop Test")
 	b.StopTimer()
 
-	// stop second tracing
-	if err := kerneltrace.Stop(); err != nil {
-		panic(err)
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Stopping second kernel trace")
+		if err := kerneltrace.Stop(); err != nil {
+			fatalf(b, "Failed to stop second kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Stopped second kernel trace")
 	}
 }
 

@@ -29,30 +29,6 @@ var (
 	enabled    bool
 )
 
-type event struct {
-	Command    string  `json:"comm"`
-	Operation  string  `json:"operation"`
-	Path       string  `json:"path"`
-	DurationNS float64 `json:"duration_ns"`
-}
-
-type info struct {
-	Run           int         `json:"run"`
-	FirstTaskOps  []operation `json:"firstTaskOps"`
-	SecondTaskOps []operation `json:"secondTaskOps"`
-}
-
-type operation struct {
-	Operation string  `json:"operation"`
-	Stats     opStats `json:"stats"`
-}
-
-type opStats struct {
-	Min float64 `json:"min"`
-	Max float64 `json:"max"`
-	Avg float64 `json:"avg"`
-}
-
 type RunType int
 
 const (
@@ -65,15 +41,24 @@ func Start(monitorPath string, outputDir string, testName string, runType RunTyp
 		return nil
 	}
 
-	fmt.Println("Starting kernel trace...")
-	traceCmd = exec.Command("python3", scriptPath, monitorPath, "--output="+getPath(outputDir, testName, runNum, runType))
-	traceCmd.Stdout = os.Stdout
-	traceCmd.Stderr = os.Stderr
-	if err := traceCmd.Start(); err != nil {
-		fmt.Println("Error running kernel trace script:", err)
+	traceCmd = exec.Command(
+		"python3",
+		scriptPath,
+		monitorPath,
+		"--output="+getKernelTraceScriptOutPath(outputDir, testName, runNum, runType))
+	stdoutFile, err := os.Create(outputDir + "/kernel-trace-stdout")
+	if err != nil {
 		return err
 	}
-	fmt.Println("Kernel trace started.")
+	stderrFile, err := os.Create(outputDir + "/kernel-trace-stderr")
+	if err != nil {
+		return err
+	}
+	traceCmd.Stdout = stdoutFile
+	traceCmd.Stderr = stderrFile
+	if err := traceCmd.Start(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -83,22 +68,30 @@ func Stop() error {
 	}
 
 	if traceCmd != nil && traceCmd.Process != nil {
-		fmt.Println("Stopping kernel trace...")
 		if err := traceCmd.Process.Signal(os.Interrupt); err != nil {
-			fmt.Println("Error stopping kernel trace script:", err)
+			if err := traceCmd.Process.Kill(); err != nil {
+				return err
+			}
 			return err
 		}
-		fmt.Println("Kernel trace stopped.")
+
+		err := traceCmd.Wait()
+		traceCmd = nil
+		return err
 	}
 	return nil
 }
 
-func getPath(outputDir string, testName string, runNum int, runType RunType) string {
-	return fmt.Sprintf("%s/%s_run_%d_task_%d.json", outputDir, testName, runNum, runType)
+func getKernelTraceScriptOutPath(outputDir string, testName string, runNum int, runType RunType) string {
+	return fmt.Sprintf("%s/kernel_trace_script_out/%s_run_%d_task_%d.json", outputDir, testName, runNum, runType+1)
 }
 
 func Enable() {
 	enabled = true
+}
+
+func IsEnabled() bool {
+	return enabled
 }
 
 func IncCounter() {

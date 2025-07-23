@@ -26,14 +26,38 @@ import (
 	"github.com/montanaflynn/stats"
 )
 
+type event struct {
+	Command    string  `json:"comm"`
+	Operation  string  `json:"operation"`
+	Path       string  `json:"path"`
+	DurationNS float64 `json:"duration_ns"`
+}
+
+type info struct {
+	Run           int         `json:"run"`
+	FirstTaskOps  []operation `json:"firstTaskOps"`
+	SecondTaskOps []operation `json:"secondTaskOps"`
+}
+
+type operation struct {
+	Operation string  `json:"operation"`
+	Stats     opStats `json:"stats"`
+}
+
+type opStats struct {
+	Min float64 `json:"min"`
+	Max float64 `json:"max"`
+	Avg float64 `json:"avg"`
+}
+
 func Parse(outputDir string, testname string, numTests int) error {
 	infos := []*info{}
 	for i := 1; i <= numTests; i++ {
-		firstStats, err := getOpsFromFile(getPath(outputDir, testname, i, FirstRun))
+		firstStats, err := getOpsFromFile(getKernelTraceScriptOutPath(outputDir, testname, i, FirstRun))
 		if err != nil {
 			return err
 		}
-		secondStats, err := getOpsFromFile(getPath(outputDir, testname, i, SecondRun))
+		secondStats, err := getOpsFromFile(getKernelTraceScriptOutPath(outputDir, testname, i, SecondRun))
 		if err != nil {
 			return err
 		}
@@ -62,7 +86,6 @@ func getOpsFromFile(path string) ([]operation, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("Failed to open kernel trace file")
 		return nil, err
 	}
 	defer file.Close()
@@ -70,7 +93,6 @@ func getOpsFromFile(path string) ([]operation, error) {
 	decoder := json.NewDecoder(file)
 	events := []event{}
 	if err := decoder.Decode(&events); err != nil {
-		fmt.Println("Failed to unmarshal kernel trace")
 		return nil, err
 	}
 

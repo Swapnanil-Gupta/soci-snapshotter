@@ -34,14 +34,14 @@ var (
 func main() {
 
 	var (
-		numberOfTests         int
-		jsonFile              string
-		showCom               bool
-		traceKernelFileAccess bool
-		kernelFileTraceDir    string
-		imageList             []benchmark.ImageDescriptor
-		err                   error
-		commit                string
+		numberOfTests           int
+		jsonFile                string
+		showCom                 bool
+		traceKernelFileAccess   bool
+		kernelTraceScriptOutDir string
+		imageList               []benchmark.ImageDescriptor
+		err                     error
+		commit                  string
 	)
 
 	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
@@ -58,12 +58,12 @@ func main() {
 	}
 
 	if traceKernelFileAccess {
-		kernelFileTraceDir = outputDir + "/kernel_file_trace_logs"
-		err := os.RemoveAll(kernelFileTraceDir)
+		kernelTraceScriptOutDir = outputDir + "/kernel_trace_script_out"
+		err := os.RemoveAll(kernelTraceScriptOutDir)
 		if err != nil {
 			panic(err)
 		}
-		err = os.MkdirAll(kernelFileTraceDir, 0755)
+		err = os.MkdirAll(kernelTraceScriptOutDir, 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -108,7 +108,7 @@ func main() {
 		}
 		if traceKernelFileAccess {
 			overlayFsTestDriver.AfterFunctions = append(overlayFsTestDriver.AfterFunctions, func() error {
-				err := kerneltrace.Parse(kernelFileTraceDir, overlayFsTestName, numberOfTests)
+				err := kerneltrace.Parse(kernelTraceScriptOutDir, overlayFsTestName, numberOfTests)
 				return err
 			})
 		}
@@ -124,7 +124,7 @@ func main() {
 		}
 		if traceKernelFileAccess {
 			sociTestDriver.AfterFunctions = append(sociTestDriver.AfterFunctions, func() error {
-				err := kerneltrace.Parse(kernelFileTraceDir, sociTestName, numberOfTests)
+				err := kerneltrace.Parse(kernelTraceScriptOutDir, sociTestName, numberOfTests)
 				return err
 			})
 		}

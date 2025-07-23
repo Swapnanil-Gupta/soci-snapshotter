@@ -40,7 +40,7 @@ func main() {
 		showCom                 bool
 		parseFileAccessPatterns bool
 		traceKernelFileAccess   bool
-		kernelFileTraceDir      string
+		kernelTraceScriptOutDir string
 		commit                  string
 		imageList               []benchmark.ImageDescriptor
 		err                     error
@@ -73,12 +73,12 @@ func main() {
 	}
 
 	if traceKernelFileAccess {
-		kernelFileTraceDir = outputDir + "/kernel_file_trace_logs"
-		err := os.RemoveAll(kernelFileTraceDir)
+		kernelTraceScriptOutDir = outputDir + "/kernel_trace_script_out"
+		err := os.RemoveAll(kernelTraceScriptOutDir)
 		if err != nil {
 			panic(err)
 		}
-		err = os.MkdirAll(kernelFileTraceDir, 0755)
+		err = os.MkdirAll(kernelTraceScriptOutDir, 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -130,7 +130,7 @@ func main() {
 
 		if traceKernelFileAccess {
 			driver.AfterFunctions = append(driver.AfterFunctions, func() error {
-				err := kerneltrace.Parse(kernelFileTraceDir, testName, numberOfTests)
+				err := kerneltrace.Parse(kernelTraceScriptOutDir, testName, numberOfTests)
 				return err
 			})
 		}

@@ -495,14 +495,14 @@ def signal_handler(sig, frame):
     print_stats()
     if args.output:
         export_data()
-    print("\nExiting...")
+    print("\nKernel trace script exiting...")
     exit(0)
     
 signal.signal(signal.SIGINT, signal_handler)
     
 # Main loop
 print("Tracing filesystem operations... Press Ctrl+C to exit.")
-print(f"Target path: {target_path}")
+print(f"Tracing target path: {target_path}")
     
 while True:
     try:
