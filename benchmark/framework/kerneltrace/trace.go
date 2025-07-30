@@ -23,20 +23,18 @@ import (
 )
 
 var (
-	scriptPath = "../kernel_trace.py"
-	traceCmd   *exec.Cmd
-	runNum     int
-	enabled    bool
+	traceCmd              *exec.Cmd
+	runNum                int
+	enabled               bool
+	runNumContainerIdsMap map[int]*containerIds = make(map[int]*containerIds)
 )
 
-type RunType int
+type containerIds struct {
+	first  string
+	second string
+}
 
-const (
-	FirstRun RunType = iota
-	SecondRun
-)
-
-func Start(monitorPath string, outputDir string, testName string, runType RunType) error {
+func Start(scriptPath string, monitorPath string, outputDir string, testName string) error {
 	if !enabled {
 		return nil
 	}
@@ -45,15 +43,8 @@ func Start(monitorPath string, outputDir string, testName string, runType RunTyp
 		"python3",
 		scriptPath,
 		monitorPath,
-		"--output="+getKernelTraceScriptOutPath(outputDir, testName, runNum, runType))
-	// stdoutFile, err := os.Create(outputDir + "/kernel-trace-stdout")
-	// if err != nil {
-	// 	return err
-	// }
-	// stderrFile, err := os.Create(outputDir + "/kernel-trace-stderr")
-	// if err != nil {
-	// 	return err
-	// }
+		"--output="+getKernelTraceScriptOutPath(outputDir, testName, runNum),
+	)
 	traceCmd.Stdout = os.Stdout
 	traceCmd.Stderr = os.Stderr
 	if err := traceCmd.Start(); err != nil {
@@ -82,8 +73,21 @@ func Stop() error {
 	return nil
 }
 
-func getKernelTraceScriptOutPath(outputDir string, testName string, runNum int, runType RunType) string {
-	return fmt.Sprintf("%s/kernel_trace_script_out/%s_run_%d_task_%d.json", outputDir, testName, runNum, runType+1)
+func getKernelTraceScriptOutPath(outputDir string, testName string, runNum int) string {
+	return fmt.Sprintf(
+		"%s/%s_run_%d.json",
+		outputDir,
+		testName,
+		runNum,
+	)
+}
+
+func ReportContainerdId(containerId string) {
+	if c, ok := runNumContainerIdsMap[runNum]; ok {
+		c.second = containerId
+	} else {
+		runNumContainerIdsMap[runNum] = &containerIds{first: containerId}
+	}
 }
 
 func Enable() {
@@ -100,4 +104,5 @@ func IncCounter() {
 
 func ResetCounter() {
 	runNum = 0
+	runNumContainerIdsMap = make(map[int]*containerIds)
 }

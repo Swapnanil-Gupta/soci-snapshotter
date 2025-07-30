@@ -53,11 +53,17 @@ type opStats struct {
 func Parse(outputDir string, testname string, numTests int) error {
 	infos := []*info{}
 	for i := 1; i <= numTests; i++ {
-		firstStats, err := getOpsFromFile(getKernelTraceScriptOutPath(outputDir, testname, i, FirstRun))
+		firstStats, err := getOpsFromFile(
+			getKernelTraceScriptOutPath(outputDir, testname, i),
+			runNumContainerIdsMap[i].first,
+		)
 		if err != nil {
 			return err
 		}
-		secondStats, err := getOpsFromFile(getKernelTraceScriptOutPath(outputDir, testname, i, SecondRun))
+		secondStats, err := getOpsFromFile(
+			getKernelTraceScriptOutPath(outputDir, testname, i),
+			runNumContainerIdsMap[i].second,
+		)
 		if err != nil {
 			return err
 		}
@@ -79,7 +85,7 @@ func Parse(outputDir string, testname string, numTests int) error {
 	return nil
 }
 
-func getOpsFromFile(path string) ([]operation, error) {
+func getOpsFromFile(path string, containerId string) ([]operation, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -98,7 +104,7 @@ func getOpsFromFile(path string) ([]operation, error) {
 
 	opMap := make(map[string][]float64)
 	for _, e := range events {
-		if !strings.Contains(e.Path, "io.containerd.runtime.v2.task") {
+		if !strings.Contains(e.Path, containerId) {
 			continue
 		}
 		if durations, ok := opMap[e.Operation]; ok {

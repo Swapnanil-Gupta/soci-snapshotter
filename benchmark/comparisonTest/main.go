@@ -107,9 +107,13 @@ func main() {
 			},
 		}
 		if traceKernelFileAccess {
-			overlayFsTestDriver.AfterFunctions = append(overlayFsTestDriver.AfterFunctions, func() error {
+			overlayFsTestDriver.AfterAllFunctions = append(overlayFsTestDriver.AfterAllFunctions, func() error {
 				err := kerneltrace.Parse(kernelTraceScriptOutDir, overlayFsTestName, numberOfTests)
 				return err
+			})
+			overlayFsTestDriver.AfterAllFunctions = append(overlayFsTestDriver.AfterAllFunctions, func() error {
+				kerneltrace.ResetCounter()
+				return nil
 			})
 		}
 		drivers = append(drivers, overlayFsTestDriver)
@@ -123,7 +127,7 @@ func main() {
 			},
 		}
 		if traceKernelFileAccess {
-			sociTestDriver.AfterFunctions = append(sociTestDriver.AfterFunctions, func() error {
+			sociTestDriver.AfterAllFunctions = append(sociTestDriver.AfterAllFunctions, func() error {
 				err := kerneltrace.Parse(kernelTraceScriptOutDir, sociTestName, numberOfTests)
 				return err
 			})

@@ -122,14 +122,15 @@ func main() {
 		}
 
 		if parseFileAccessPatterns {
-			driver.AfterFunctions = append(driver.AfterFunctions, func() error {
+			driver.AfterAllFunctions = append(driver.AfterAllFunctions, func() error {
 				err := bparser.ParseFileAccesses(shortName)
 				return err
 			})
 		}
 
 		if traceKernelFileAccess {
-			driver.AfterFunctions = append(driver.AfterFunctions, func() error {
+			// TODO: Move kernel trace start/stop here
+			driver.AfterAllFunctions = append(driver.AfterAllFunctions, func() error {
 				err := kerneltrace.Parse(kernelTraceScriptOutDir, testName, numberOfTests)
 				return err
 			})
