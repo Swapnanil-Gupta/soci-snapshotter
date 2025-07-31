@@ -131,6 +131,10 @@ func main() {
 				err := kerneltrace.Parse(kernelTraceScriptOutDir, sociTestName, numberOfTests)
 				return err
 			})
+			sociTestDriver.AfterAllFunctions = append(sociTestDriver.AfterAllFunctions, func() error {
+				kerneltrace.ResetCounter()
+				return nil
+			})
 		}
 		drivers = append(drivers, sociTestDriver)
 	}
