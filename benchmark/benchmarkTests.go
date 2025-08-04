@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 	"github.com/containerd/containerd"
 	"github.com/containerd/log"
 	"github.com/google/uuid"
@@ -31,6 +32,8 @@ import (
 
 var (
 	outputDir              = "./output"
+	kernelTraceScriptPath  = "../kernel_trace.py"
+	kernelTraceOutDir      = outputDir + "/kernel_trace_script_out"
 	containerdAddress      = "/tmp/containerd-grpc/containerd.sock"
 	containerdRoot         = "/tmp/lib/containerd"
 	containerdState        = "/tmp/containerd"
@@ -105,6 +108,31 @@ func SociFullRun(
 	b *testing.B,
 	testName string,
 	imageDescriptor ImageDescriptor) {
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		kerneltrace.IncRunNum()
+		stopKernelTrace, err := kerneltrace.Start(kernelTraceScriptPath, containerdState, kernelTraceOutDir, testName)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+			time.Sleep(5 * time.Second)
+		}()
+
+		log.G(ctx).Info("Sleeping for 5 seconds after starting kernel trace...")
+		time.Sleep(5 * time.Second)
+		log.G(ctx).Info("Continuing...")
+	} else {
+		log.G(ctx).Info("Kernel trace disabled")
+	}
+
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -138,6 +166,12 @@ func SociFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupContainer()
+
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Infof("Reporting containerd id to kernel trace %s", container.ID())
+		kerneltrace.ReportContainerId(container.ID())
+	}
+
 	log.G(ctx).WithField("benchmark", "CreateTask").WithField("event", "Start").Infof("Start Create Task")
 	taskDetails, cleanupTask, err := sociContainerdProc.CreateTask(ctx, container)
 	log.G(ctx).WithField("benchmark", "CreateTask").WithField("event", "Stop").Infof("Stop Create Task")
@@ -164,6 +198,12 @@ func SociFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupContainerSecondRun()
+
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Infof("Reporting containerd id to kernel trace %s", containerSecondRun.ID())
+		kerneltrace.ReportContainerId(containerSecondRun.ID())
+	}
+
 	taskDetailsSecondRun, cleanupTaskSecondRun, err := sociContainerdProc.CreateTask(ctx, containerSecondRun)
 	if err != nil {
 		fatalf(b, "%s", err)
@@ -188,6 +228,31 @@ func OverlayFSFullRun(
 	b *testing.B,
 	testName string,
 	imageDescriptor ImageDescriptor) {
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		kerneltrace.IncRunNum()
+		stopKernelTrace, err := kerneltrace.Start(kernelTraceScriptPath, containerdState, kernelTraceOutDir, testName)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+			time.Sleep(5 * time.Second)
+		}()
+
+		log.G(ctx).Info("Sleeping for 5 seconds after starting kernel trace...")
+		time.Sleep(5 * time.Second)
+		log.G(ctx).Info("Continuing...")
+	} else {
+		log.G(ctx).Info("Kernel trace disabled")
+	}
+
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -223,6 +288,12 @@ func OverlayFSFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupContainer()
+
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Infof("Reporting containerd id to kernel trace %s", container.ID())
+		kerneltrace.ReportContainerId(container.ID())
+	}
+
 	log.G(ctx).WithField("benchmark", "CreateTask").WithField("event", "Start").Infof("Start Create Task")
 	taskDetails, cleanupTask, err := containerdProcess.CreateTask(ctx, container)
 	log.G(ctx).WithField("benchmark", "CreateTask").WithField("event", "Stop").Infof("Stop Create Task")
@@ -249,6 +320,12 @@ func OverlayFSFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupContainerSecondRun()
+
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Infof("Reporting containerd id to kernel trace %s", containerSecondRun.ID())
+		kerneltrace.ReportContainerId(containerSecondRun.ID())
+	}
+
 	taskDetailsSecondRun, cleanupTaskSecondRun, err := containerdProcess.CreateTask(ctx, containerSecondRun)
 	if err != nil {
 		fatalf(b, "%s", err)
