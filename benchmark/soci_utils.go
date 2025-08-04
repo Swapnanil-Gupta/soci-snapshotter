@@ -137,16 +137,37 @@ func (proc *SociProcess) StopProcess() {
 func (proc *SociContainerdProcess) SociRPullImageFromRegistry(
 	ctx context.Context,
 	imageRef string,
-	sociIndexDigest string) (containerd.Image, error) {
-	image, err := proc.Client.Pull(ctx, imageRef, []containerd.RemoteOpt{
+	sociIndexDigest string,
+	fastPull bool,
+) (containerd.Image, error) {
+	opts := []containerd.RemoteOpt{
 		containerd.WithResolver(framework.GetResolver(ctx, imageRef)),
 		//nolint:staticcheck
 		containerd.WithSchema1Conversion, //lint:ignore SA1019
 		containerd.WithPullUnpack,
 		containerd.WithPullSnapshotter("soci"),
-		containerd.WithImageHandlerWrapper(source.AppendDefaultLabelsHandlerWrapper(
-			sociIndexDigest, ctdsnapshotters.AppendInfoHandlerWrapper(imageRef))),
-	}...)
+	}
+
+	if fastPull {
+		opts = append(
+			opts,
+			containerd.WithImageHandlerWrapper(
+				ctdsnapshotters.AppendInfoHandlerWrapper(imageRef),
+			),
+		)
+	} else {
+		opts = append(
+			opts,
+			containerd.WithImageHandlerWrapper(
+				source.AppendDefaultLabelsHandlerWrapper(
+					sociIndexDigest,
+					ctdsnapshotters.AppendInfoHandlerWrapper(imageRef),
+				),
+			),
+		)
+	}
+
+	image, err := proc.Client.Pull(ctx, imageRef, opts...)
 	if err != nil {
 		fmt.Printf("Soci Pull Failed %v\n", err)
 		return nil, err

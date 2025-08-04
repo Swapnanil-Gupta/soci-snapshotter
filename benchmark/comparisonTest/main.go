@@ -135,6 +135,25 @@ func main() {
 			})
 		}
 		drivers = append(drivers, sociTestDriver)
+
+		sociFastPullTestName := "SociFastPullFull" + shortName
+		sociFastPullTestDriver := framework.BenchmarkTestDriver{
+			TestName:      sociFastPullTestName,
+			NumberOfTests: numberOfTests,
+			TestFunction: func(b *testing.B) {
+				benchmark.SociFastPullFullRun(ctx, b, sociFastPullTestName, image)
+			},
+		}
+		if traceKernelFileAccess {
+			sociFastPullTestDriver.AfterAllFunctions = append(sociFastPullTestDriver.AfterAllFunctions, func() error {
+				kerneltrace.Reset()
+				return nil
+			})
+			sociFastPullTestDriver.AfterAllFunctions = append(sociFastPullTestDriver.AfterAllFunctions, func() error {
+				return kerneltrace.Parse(kernelTraceScriptOutDir, sociFastPullTestName, numberOfTests)
+			})
+		}
+		drivers = append(drivers, sociFastPullTestDriver)
 	}
 
 	benchmarks := framework.BenchmarkFramework{

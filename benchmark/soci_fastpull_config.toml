@@ -1,0 +1,23 @@
+[cri_keychain]
+  enable_keychain = true 
+  image_service_path = "/tmp/containerd-grpc/containerd.sock"
+
+[fuse]
+  log_fuse_operations = true
+
+[content_store]
+  type = "containerd"
+  containerd_address="/tmp/containerd-grpc/containerd.sock"
+
+[pull_modes.parallel_pull_unpack]
+  enable = true
+  max_concurrent_downloads = 50
+  max_concurrent_downloads_per_image = 10
+  concurrent_download_chunk_size = "8mb"
+  max_concurrent_unpacks = 20
+  max_concurrent_unpacks_per_image = 10
+  discard_unpacked_layers = true
+  
+  [pull_modes.parallel_pull_unpack.decompress_streams."gzip"]
+    path = "/usr/bin/unpigz"
+    args = ["-d", "-c"]
