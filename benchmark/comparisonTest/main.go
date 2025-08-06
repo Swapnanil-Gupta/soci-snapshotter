@@ -24,6 +24,7 @@ import (
 
 	"github.com/awslabs/soci-snapshotter/benchmark"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 )
 
 var (
@@ -33,15 +34,18 @@ var (
 func main() {
 
 	var (
-		numberOfTests int
-		jsonFile      string
-		showCom       bool
-		imageList     []benchmark.ImageDescriptor
-		err           error
-		commit        string
+		numberOfTests           int
+		jsonFile                string
+		showCom                 bool
+		traceKernelFileAccess   bool
+		kernelTraceScriptOutDir string
+		imageList               []benchmark.ImageDescriptor
+		err                     error
+		commit                  string
 	)
 
 	flag.BoolVar(&showCom, "show-commit", false, "tag the commit hash to the benchmark results")
+	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
 	flag.IntVar(&numberOfTests, "count", 5, "Describes the number of runs a benchmarker should run. Default: 5")
 	flag.StringVar(&jsonFile, "f", "default", "Path to a json file describing image details in this order ['Name','Image ref', 'Ready line', 'manifest ref']")
 
@@ -51,6 +55,19 @@ func main() {
 		commit, _ = benchmark.GetCommitHash()
 	} else {
 		commit = "N/A"
+	}
+
+	if traceKernelFileAccess {
+		kernelTraceScriptOutDir = outputDir + "/kernel_trace_out"
+		err := os.RemoveAll(kernelTraceScriptOutDir)
+		if err != nil {
+			panic(err)
+		}
+		err = os.MkdirAll(kernelTraceScriptOutDir, 0755)
+		if err != nil {
+			panic(err)
+		}
+		kerneltrace.Enable()
 	}
 
 	if jsonFile == "default" {
@@ -80,20 +97,66 @@ func main() {
 	for _, image := range imageList {
 		image := image
 		shortName := image.ShortName
-		drivers = append(drivers, framework.BenchmarkTestDriver{
-			TestName:      "OverlayFSFull" + shortName,
+
+		overlayFsTestName := "OverlayFSFull" + shortName
+		overlayFsTestDriver := framework.BenchmarkTestDriver{
+			TestName:      overlayFsTestName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B) {
-				benchmark.OverlayFSFullRun(ctx, b, "OverlayFSFull"+shortName, image)
+				benchmark.OverlayFSFullRun(ctx, b, overlayFsTestName, image)
 			},
-		})
-		drivers = append(drivers, framework.BenchmarkTestDriver{
-			TestName:      "SociFull" + shortName,
+		}
+		if traceKernelFileAccess {
+			overlayFsTestDriver.BeforeEachFunctions = append(overlayFsTestDriver.BeforeEachFunctions, func() error {
+				kerneltrace.IncRunNum()
+				return nil
+			})
+			overlayFsTestDriver.AfterAllFunctions = append(overlayFsTestDriver.AfterAllFunctions, func() error {
+				kerneltrace.ResetRunNum()
+				return kerneltrace.Parse(kernelTraceScriptOutDir, overlayFsTestName, numberOfTests)
+			})
+		}
+		drivers = append(drivers, overlayFsTestDriver)
+
+		sociTestName := "SociFull" + shortName
+		sociTestDriver := framework.BenchmarkTestDriver{
+			TestName:      sociTestName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B) {
 				benchmark.SociFullRun(ctx, b, "SociFull"+shortName, image)
 			},
-		})
+		}
+		if traceKernelFileAccess {
+			sociTestDriver.BeforeEachFunctions = append(sociTestDriver.BeforeEachFunctions, func() error {
+				kerneltrace.IncRunNum()
+				return nil
+			})
+			sociTestDriver.AfterAllFunctions = append(sociTestDriver.AfterAllFunctions, func() error {
+				kerneltrace.ResetRunNum()
+				return kerneltrace.Parse(kernelTraceScriptOutDir, sociTestName, numberOfTests)
+			})
+		}
+		drivers = append(drivers, sociTestDriver)
+
+		sociFastPullTestName := "SociFastPullFull" + shortName
+		sociFastPullTestDriver := framework.BenchmarkTestDriver{
+			TestName:      sociFastPullTestName,
+			NumberOfTests: numberOfTests,
+			TestFunction: func(b *testing.B) {
+				benchmark.SociFastPullFullRun(ctx, b, sociFastPullTestName, image)
+			},
+		}
+		if traceKernelFileAccess {
+			sociFastPullTestDriver.BeforeEachFunctions = append(sociFastPullTestDriver.BeforeEachFunctions, func() error {
+				kerneltrace.IncRunNum()
+				return nil
+			})
+			sociFastPullTestDriver.AfterAllFunctions = append(sociFastPullTestDriver.AfterAllFunctions, func() error {
+				kerneltrace.ResetRunNum()
+				return kerneltrace.Parse(kernelTraceScriptOutDir, sociFastPullTestName, numberOfTests)
+			})
+		}
+		drivers = append(drivers, sociFastPullTestDriver)
 	}
 
 	benchmarks := framework.BenchmarkFramework{

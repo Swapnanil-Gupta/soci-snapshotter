@@ -161,6 +161,10 @@ type TaskDetails struct {
 	stderrReader io.Reader
 }
 
+func (t *TaskDetails) Task() containerd.Task {
+	return t.task
+}
+
 func (proc *ContainerdProcess) CreateTask(
 	ctx context.Context,
 	container containerd.Container) (*TaskDetails, func(), error) {

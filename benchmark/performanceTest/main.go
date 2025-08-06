@@ -24,6 +24,7 @@ import (
 
 	"github.com/awslabs/soci-snapshotter/benchmark"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 	bparser "github.com/awslabs/soci-snapshotter/benchmark/framework/parser"
 )
 
@@ -38,6 +39,8 @@ func main() {
 		jsonFile                string
 		showCom                 bool
 		parseFileAccessPatterns bool
+		traceKernelFileAccess   bool
+		kernelTraceScriptOutDir string
 		commit                  string
 		imageList               []benchmark.ImageDescriptor
 		err                     error
@@ -45,6 +48,7 @@ func main() {
 
 	flag.BoolVar(&parseFileAccessPatterns, "parse-file-access", false, "Parse fuse file access patterns.")
 	flag.BoolVar(&showCom, "show-commit", false, "tag the commit hash to the benchmark results")
+	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
 	flag.IntVar(&numberOfTests, "count", 5, "Describes the number of runs a benchmarker should run. Default: 5")
 	flag.StringVar(&jsonFile, "f", "default", "Path to a json file describing image details in this order ['Name','Image ref', 'Ready line', 'manifest ref']")
 
@@ -66,6 +70,19 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+	}
+
+	if traceKernelFileAccess {
+		kernelTraceScriptOutDir = outputDir + "/kernel_trace_out"
+		err := os.RemoveAll(kernelTraceScriptOutDir)
+		if err != nil {
+			panic(err)
+		}
+		err = os.MkdirAll(kernelTraceScriptOutDir, 0755)
+		if err != nil {
+			panic(err)
+		}
+		kerneltrace.Enable()
 	}
 
 	if jsonFile == "default" {
@@ -104,11 +121,23 @@ func main() {
 			},
 		}
 		if parseFileAccessPatterns {
-			driver.AfterFunction = func() error {
+			driver.AfterAllFunctions = append(driver.AfterAllFunctions, func() error {
 				err := bparser.ParseFileAccesses(shortName)
 				return err
-			}
+			})
 		}
+
+		if traceKernelFileAccess {
+			driver.BeforeEachFunctions = append(driver.AfterEachFunctions, func() error {
+				kerneltrace.IncRunNum()
+				return nil
+			})
+			driver.AfterAllFunctions = append(driver.AfterAllFunctions, func() error {
+				kerneltrace.ResetRunNum()
+				return kerneltrace.Parse(kernelTraceScriptOutDir, testName, numberOfTests)
+			})
+		}
+
 		drivers = append(drivers, driver)
 	}
 

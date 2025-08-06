@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 	"github.com/containerd/containerd"
 	"github.com/containerd/log"
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ import (
 
 var (
 	outputDir              = "./output"
+	kernelTraceOutDir      = outputDir + "/kernel_trace_out"
 	containerdAddress      = "/tmp/containerd-grpc/containerd.sock"
 	containerdRoot         = "/tmp/lib/containerd"
 	containerdState        = "/tmp/containerd"
@@ -41,6 +43,7 @@ var (
 	sociAddress            = "/tmp/soci-snapshotter-grpc/soci-snapshotter-grpc.sock"
 	sociRoot               = "/tmp/lib/soci-snapshotter-grpc"
 	sociConfig             = "../soci_config.toml"
+	sociFastPullConfig     = "../soci_fastpull_config.toml"
 	stargzAddress          = "/tmp/containerd-stargz-grpc/containerd-stargz-grpc.sock"
 	stargzConfig           = "../stargz_config.toml"
 	stargzRoot             = "/tmp/lib/containerd-stargz-grpc"
@@ -86,21 +89,21 @@ func SociRPullPullImage(
 		fatalf(b, "Failed to create containerd proc: %v\n", err)
 	}
 	defer containerdProcess.StopProcess()
-	sociProcess, err := getSociProcess()
+	sociProcess, err := getSociProcess(sociConfig)
 	if err != nil {
 		fatalf(b, "Failed to create soci proc: %v\n", err)
 	}
 	defer sociProcess.StopProcess()
 	sociContainerdProc := SociContainerdProcess{containerdProcess}
 	b.ResetTimer()
-	_, err = sociContainerdProc.SociRPullImageFromRegistry(ctx, imageRef, indexDigest)
+	_, err = sociContainerdProc.SociRPullImageFromRegistry(ctx, imageRef, indexDigest, false)
 	if err != nil {
 		fatalf(b, "%s", err)
 	}
 	b.StopTimer()
 }
 
-func SociFullRun(
+func SociFastPullFullRun(
 	ctx context.Context,
 	b *testing.B,
 	testName string,
@@ -113,7 +116,7 @@ func SociFullRun(
 		fatalf(b, "Failed to create containerd proc: %v\n", err)
 	}
 	defer containerdProcess.StopProcess()
-	sociProcess, err := getSociProcess()
+	sociProcess, err := getSociProcess(sociFastPullConfig)
 	if err != nil {
 		fatalf(b, "Failed to create soci proc: %v\n", err)
 	}
@@ -123,7 +126,7 @@ func SociFullRun(
 	pullStart := time.Now()
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Start").Infof("Start Test")
 	log.G(ctx).WithField("benchmark", "Pull").WithField("event", "Start").Infof("Start Pull Image")
-	image, err := sociContainerdProc.SociRPullImageFromRegistry(ctx, imageDescriptor.ImageRef, imageDescriptor.SociIndexDigest)
+	image, err := sociContainerdProc.SociRPullImageFromRegistry(ctx, imageDescriptor.ImageRef, "", true)
 	log.G(ctx).WithField("benchmark", "Pull").WithField("event", "Stop").Infof("Stop Pull Image")
 	pullDuration := time.Since(pullStart)
 	b.ReportMetric(float64(pullDuration.Milliseconds()), "pullDuration")
@@ -131,6 +134,17 @@ func SociFullRun(
 	if err != nil {
 		fatalf(b, "%s", err)
 	}
+
+	log.G(ctx).WithField("benchmark", "Unpack").WithField("event", "Start").Infof("Start Unpack Image")
+	unpackStart := time.Now()
+	err = image.Unpack(ctx, "soci")
+	unpackDuration := time.Since(unpackStart)
+	log.G(ctx).WithField("benchmark", "Unpack").WithField("event", "Stop").Infof("Stop Unpack Image")
+	b.ReportMetric(float64(unpackDuration.Milliseconds()), "unpackDuration")
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+
 	log.G(ctx).WithField("benchmark", "CreateContainer").WithField("event", "Start").Infof("Start Create Container")
 	container, cleanupContainer, err := sociContainerdProc.CreateSociContainer(ctx, image, imageDescriptor)
 	log.G(ctx).WithField("benchmark", "CreateContainer").WithField("event", "Stop").Infof("Stop Create Container")
@@ -145,6 +159,32 @@ func SociFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupTask()
+
+	// kernel trace first task
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		stopKernelTrace, err := kerneltrace.Start(
+			ctx,
+			taskDetails.Task(),
+			testName,
+			kernelTraceOutDir,
+			kerneltrace.FirstTask,
+		)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+		}()
+	} else {
+		log.G(ctx).Info("Kernel trace is disabled")
+	}
+
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
 	runLazyTaskStart := time.Now()
 	cleanupRun, err := sociContainerdProc.RunContainerTaskForReadyLine(ctx, taskDetails, imageDescriptor.ReadyLine, imageDescriptor.Timeout())
@@ -169,6 +209,163 @@ func SociFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupTaskSecondRun()
+
+	// kernel trace second task
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		stopKernelTrace, err := kerneltrace.Start(
+			ctx,
+			taskDetailsSecondRun.Task(),
+			testName,
+			kernelTraceOutDir,
+			kerneltrace.SecondTask,
+		)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+		}()
+	}
+
+	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Start").Infof("Start Run Task Twice")
+	runLocalStart := time.Now()
+	cleanupRunSecond, err := sociContainerdProc.RunContainerTaskForReadyLine(ctx, taskDetailsSecondRun, imageDescriptor.ReadyLine, imageDescriptor.Timeout())
+	localTaskStats := time.Since(runLocalStart)
+	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Stop").Infof("Stop Run Task Twice")
+	b.ReportMetric(float64(localTaskStats.Milliseconds()), "localTaskStats")
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	defer cleanupRunSecond()
+	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Stop").Infof("Stop Test")
+	b.StopTimer()
+}
+
+func SociFullRun(
+	ctx context.Context,
+	b *testing.B,
+	testName string,
+	imageDescriptor ImageDescriptor) {
+	testUUID := uuid.New().String()
+	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
+	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
+	containerdProcess, err := getContainerdProcess(ctx, containerdSociConfig)
+	if err != nil {
+		fatalf(b, "Failed to create containerd proc: %v\n", err)
+	}
+	defer containerdProcess.StopProcess()
+	sociProcess, err := getSociProcess(sociConfig)
+	if err != nil {
+		fatalf(b, "Failed to create soci proc: %v\n", err)
+	}
+	defer sociProcess.StopProcess()
+	sociContainerdProc := SociContainerdProcess{containerdProcess}
+	b.ResetTimer()
+	pullStart := time.Now()
+	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Start").Infof("Start Test")
+	log.G(ctx).WithField("benchmark", "Pull").WithField("event", "Start").Infof("Start Pull Image")
+	image, err := sociContainerdProc.SociRPullImageFromRegistry(ctx, imageDescriptor.ImageRef, imageDescriptor.SociIndexDigest, false)
+	log.G(ctx).WithField("benchmark", "Pull").WithField("event", "Stop").Infof("Stop Pull Image")
+	pullDuration := time.Since(pullStart)
+	b.ReportMetric(float64(pullDuration.Milliseconds()), "pullDuration")
+	b.ReportMetric(0, "unpackDuration")
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	log.G(ctx).WithField("benchmark", "CreateContainer").WithField("event", "Start").Infof("Start Create Container")
+	container, cleanupContainer, err := sociContainerdProc.CreateSociContainer(ctx, image, imageDescriptor)
+	log.G(ctx).WithField("benchmark", "CreateContainer").WithField("event", "Stop").Infof("Stop Create Container")
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	defer cleanupContainer()
+	log.G(ctx).WithField("benchmark", "CreateTask").WithField("event", "Start").Infof("Start Create Task")
+	taskDetails, cleanupTask, err := sociContainerdProc.CreateTask(ctx, container)
+	log.G(ctx).WithField("benchmark", "CreateTask").WithField("event", "Stop").Infof("Stop Create Task")
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	defer cleanupTask()
+
+	// kernel trace first task
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		stopKernelTrace, err := kerneltrace.Start(
+			ctx,
+			taskDetails.Task(),
+			testName,
+			kernelTraceOutDir,
+			kerneltrace.FirstTask,
+		)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+		}()
+	} else {
+		log.G(ctx).Info("Kernel trace is disabled")
+	}
+
+	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
+	runLazyTaskStart := time.Now()
+	cleanupRun, err := sociContainerdProc.RunContainerTaskForReadyLine(ctx, taskDetails, imageDescriptor.ReadyLine, imageDescriptor.Timeout())
+	lazyTaskDuration := time.Since(runLazyTaskStart)
+	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Stop").Infof("Stop Run Task")
+	b.ReportMetric(float64(lazyTaskDuration.Milliseconds()), "lazyTaskDuration")
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	// In order for host networking to work, we need to clean up the task so that any network resources are released before running the second container
+	// We don't want this cleanup time included in the benchmark, though.
+	b.StopTimer()
+	cleanupRun()
+	b.StartTimer()
+	containerSecondRun, cleanupContainerSecondRun, err := sociContainerdProc.CreateSociContainer(ctx, image, imageDescriptor)
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	defer cleanupContainerSecondRun()
+	taskDetailsSecondRun, cleanupTaskSecondRun, err := sociContainerdProc.CreateTask(ctx, containerSecondRun)
+	if err != nil {
+		fatalf(b, "%s", err)
+	}
+	defer cleanupTaskSecondRun()
+
+	// kernel trace second task
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		stopKernelTrace, err := kerneltrace.Start(
+			ctx,
+			taskDetailsSecondRun.Task(),
+			testName,
+			kernelTraceOutDir,
+			kerneltrace.SecondTask,
+		)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+		}()
+	}
+
 	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Start").Infof("Start Run Task Twice")
 	runLocalStart := time.Now()
 	cleanupRunSecond, err := sociContainerdProc.RunContainerTaskForReadyLine(ctx, taskDetailsSecondRun, imageDescriptor.ReadyLine, imageDescriptor.Timeout())
@@ -230,6 +427,32 @@ func OverlayFSFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupTask()
+
+	// kernel trace first task
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		stopKernelTrace, err := kerneltrace.Start(
+			ctx,
+			taskDetails.Task(),
+			testName,
+			kernelTraceOutDir,
+			kerneltrace.FirstTask,
+		)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+		}()
+	} else {
+		log.G(ctx).Info("Kernel trace is disabled")
+	}
+
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
 	runLazyTaskStart := time.Now()
 	cleanupRun, err := containerdProcess.RunContainerTaskForReadyLine(ctx, taskDetails, imageDescriptor.ReadyLine, imageDescriptor.Timeout())
@@ -254,6 +477,30 @@ func OverlayFSFullRun(
 		fatalf(b, "%s", err)
 	}
 	defer cleanupTaskSecondRun()
+
+	// kernel trace second task
+	if kerneltrace.IsEnabled() {
+		log.G(ctx).Info("Starting kernel trace")
+		stopKernelTrace, err := kerneltrace.Start(
+			ctx,
+			taskDetailsSecondRun.Task(),
+			testName,
+			kernelTraceOutDir,
+			kerneltrace.SecondTask,
+		)
+		if err != nil {
+			fatalf(b, "Failed to start kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("Started kernel trace")
+		defer func() {
+			log.G(ctx).Info("Stopping kernel trace")
+			if err := stopKernelTrace(); err != nil {
+				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			}
+			log.G(ctx).Info("Stopped kernel trace")
+		}()
+	}
+
 	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Start").Infof("Start Run Task Twice")
 	runLocalStart := time.Now()
 	cleanupRunSecond, err := containerdProcess.RunContainerTaskForReadyLine(ctx, taskDetailsSecondRun, imageDescriptor.ReadyLine, imageDescriptor.Timeout())
@@ -316,7 +563,7 @@ func getContainerdProcess(ctx context.Context, containerdConfig string) (*framew
 		outputDir)
 }
 
-func getSociProcess() (*SociProcess, error) {
+func getSociProcess(sociConfig string) (*SociProcess, error) {
 	return StartSoci(
 		sociBinary,
 		sociAddress,
