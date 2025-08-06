@@ -110,7 +110,6 @@ func main() {
 
 	var drivers []framework.BenchmarkTestDriver
 	for _, image := range imageList {
-		image := image
 		shortName := image.ShortName
 		testName := "SociFull" + shortName
 		driver := framework.BenchmarkTestDriver{
