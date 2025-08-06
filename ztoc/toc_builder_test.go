@@ -30,9 +30,10 @@ import (
 func TestTocBuilder(t *testing.T) {
 	t.Parallel()
 
+	r := testutil.NewTestRand(t)
 	tarEntries := []testutil.TarEntry{
-		testutil.File("test1", string(testutil.RandomByteData(10000000))),
-		testutil.File("test2", string(testutil.RandomByteData(20000000))),
+		testutil.File("test1", string(r.RandomByteData(10000000))),
+		testutil.File("test2", string(r.RandomByteData(20000000))),
 	}
 
 	tarReader := func(entries []testutil.TarEntry) io.Reader {
@@ -97,7 +98,6 @@ func TestTocBuilder(t *testing.T) {
 	builder.RegisterTarProvider(compression.Uncompressed, TarProviderTar)
 
 	for _, tt := range testCases {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			tarReader := tt.makeTarReader(tt.tarEntries)
 			tarFile, _, err := testutil.WriteTarToTempFile("toc_builder", tarReader)
