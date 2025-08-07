@@ -76,6 +76,7 @@ type timing struct {
 }
 
 type timingStats struct {
+	Sum   float64 `json:"sum"`
 	Min   float64 `json:"min"`
 	Max   float64 `json:"max"`
 	Mean  float64 `json:"mean"`
@@ -186,7 +187,7 @@ func getEventsFromFile(path string) ([]*event, error) {
 			res[name] = matches[i]
 		}
 
-		duration, err := strconv.ParseFloat(res["duration"], 64)
+		duration, err := strconv.ParseFloat(getMapVal(res, "duration"), 64)
 		if err != nil {
 			duration = -1
 		}
@@ -251,6 +252,10 @@ func getTimingStats(timings []*timing) *timingStats {
 	for _, t := range timings {
 		durations = append(durations, t.Duration)
 	}
+	sum, err := stats.Sum(durations)
+	if err != nil {
+		sum = -1
+	}
 	min, err := stats.Min(durations)
 	if err != nil {
 		min = -1
@@ -280,6 +285,7 @@ func getTimingStats(timings []*timing) *timingStats {
 		pct90 = -1
 	}
 	return &timingStats{
+		Sum:   sum,
 		Min:   min,
 		Max:   max,
 		Mean:  mean,

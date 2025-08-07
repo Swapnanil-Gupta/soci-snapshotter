@@ -19,10 +19,10 @@ package kerneltrace
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/log"
 )
 
 var (
@@ -59,8 +59,8 @@ func Start(
 		testName,
 		taskNum,
 	)...)
-	traceCmd.Stdout = os.Stdout
-	traceCmd.Stderr = os.Stderr
+	traceCmd.Stdout = log.G(ctx).Writer()
+	traceCmd.Stderr = log.G(ctx).Writer()
 	if err := traceCmd.Start(); err != nil {
 		return nil, err
 	}
