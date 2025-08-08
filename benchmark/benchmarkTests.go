@@ -161,9 +161,11 @@ func SociFastPullFullRun(
 	defer cleanupTask()
 
 	// kernel trace first task
+	b.StopTimer()
+	var stopFirstKernelTrace func() error
 	if kerneltrace.IsEnabled() {
-		log.G(ctx).Info("Starting kernel trace")
-		stopKernelTrace, err := kerneltrace.Start(
+		log.G(ctx).Info("starting first kernel trace")
+		stopFirstKernelTrace, err = kerneltrace.Start(
 			ctx,
 			taskDetails.Task(),
 			testName,
@@ -171,19 +173,13 @@ func SociFastPullFullRun(
 			kerneltrace.FirstTask,
 		)
 		if err != nil {
-			fatalf(b, "Failed to start kernel trace: %v\n", err)
+			fatalf(b, "failed to start first kernel trace: %v\n", err)
 		}
-		log.G(ctx).Info("Started kernel trace")
-		defer func() {
-			log.G(ctx).Info("Stopping kernel trace")
-			if err := stopKernelTrace(); err != nil {
-				fatalf(b, "Failed to stop kernel trace: %v\n", err)
-			}
-			log.G(ctx).Info("Stopped kernel trace")
-		}()
+		log.G(ctx).Info("started first kernel trace")
 	} else {
-		log.G(ctx).Info("Kernel trace is disabled")
+		log.G(ctx).Info("kernel trace is disabled")
 	}
+	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
 	runLazyTaskStart := time.Now()
@@ -210,10 +206,19 @@ func SociFastPullFullRun(
 	}
 	defer cleanupTaskSecondRun()
 
+	// stop first kernel trace
+	b.StopTimer()
+	if kerneltrace.IsEnabled() && stopFirstKernelTrace != nil {
+		log.G(ctx).Info("stopping first kernel trace")
+		if err := stopFirstKernelTrace(); err != nil {
+			fatalf(b, "failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first kernel trace")
+	}
 	// kernel trace second task
 	if kerneltrace.IsEnabled() {
-		log.G(ctx).Info("Starting kernel trace")
-		stopKernelTrace, err := kerneltrace.Start(
+		log.G(ctx).Info("starting second kernel trace")
+		stopSecondKernelTrace, err := kerneltrace.Start(
 			ctx,
 			taskDetailsSecondRun.Task(),
 			testName,
@@ -221,17 +226,18 @@ func SociFastPullFullRun(
 			kerneltrace.SecondTask,
 		)
 		if err != nil {
-			fatalf(b, "Failed to start kernel trace: %v\n", err)
+			fatalf(b, "failed to start second kernel trace: %v\n", err)
 		}
-		log.G(ctx).Info("Started kernel trace")
+		log.G(ctx).Info("started second kernel trace")
 		defer func() {
-			log.G(ctx).Info("Stopping kernel trace")
-			if err := stopKernelTrace(); err != nil {
-				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			log.G(ctx).Info("stopping second kernel trace")
+			if err := stopSecondKernelTrace(); err != nil {
+				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
-			log.G(ctx).Info("Stopped kernel trace")
+			log.G(ctx).Info("stopped second kernel trace")
 		}()
 	}
+	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Start").Infof("Start Run Task Twice")
 	runLocalStart := time.Now()
@@ -294,9 +300,11 @@ func SociFullRun(
 	defer cleanupTask()
 
 	// kernel trace first task
+	b.StopTimer()
+	var stopFirstKernelTrace func() error
 	if kerneltrace.IsEnabled() {
-		log.G(ctx).Info("Starting kernel trace")
-		stopKernelTrace, err := kerneltrace.Start(
+		log.G(ctx).Info("starting first kernel trace")
+		stopFirstKernelTrace, err = kerneltrace.Start(
 			ctx,
 			taskDetails.Task(),
 			testName,
@@ -304,19 +312,13 @@ func SociFullRun(
 			kerneltrace.FirstTask,
 		)
 		if err != nil {
-			fatalf(b, "Failed to start kernel trace: %v\n", err)
+			fatalf(b, "failed to start first kernel trace: %v\n", err)
 		}
-		log.G(ctx).Info("Started kernel trace")
-		defer func() {
-			log.G(ctx).Info("Stopping kernel trace")
-			if err := stopKernelTrace(); err != nil {
-				fatalf(b, "Failed to stop kernel trace: %v\n", err)
-			}
-			log.G(ctx).Info("Stopped kernel trace")
-		}()
+		log.G(ctx).Info("started first kernel trace")
 	} else {
-		log.G(ctx).Info("Kernel trace is disabled")
+		log.G(ctx).Info("kernel trace is disabled")
 	}
+	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
 	runLazyTaskStart := time.Now()
@@ -343,10 +345,19 @@ func SociFullRun(
 	}
 	defer cleanupTaskSecondRun()
 
+	// stop first kernel trace
+	b.StopTimer()
+	if kerneltrace.IsEnabled() && stopFirstKernelTrace != nil {
+		log.G(ctx).Info("stopping first kernel trace")
+		if err := stopFirstKernelTrace(); err != nil {
+			fatalf(b, "failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first kernel trace")
+	}
 	// kernel trace second task
 	if kerneltrace.IsEnabled() {
-		log.G(ctx).Info("Starting kernel trace")
-		stopKernelTrace, err := kerneltrace.Start(
+		log.G(ctx).Info("starting second kernel trace")
+		stopSecondKernelTrace, err := kerneltrace.Start(
 			ctx,
 			taskDetailsSecondRun.Task(),
 			testName,
@@ -354,17 +365,18 @@ func SociFullRun(
 			kerneltrace.SecondTask,
 		)
 		if err != nil {
-			fatalf(b, "Failed to start kernel trace: %v\n", err)
+			fatalf(b, "failed to start second kernel trace: %v\n", err)
 		}
-		log.G(ctx).Info("Started kernel trace")
+		log.G(ctx).Info("started second kernel trace")
 		defer func() {
-			log.G(ctx).Info("Stopping kernel trace")
-			if err := stopKernelTrace(); err != nil {
-				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			log.G(ctx).Info("stopping second kernel trace")
+			if err := stopSecondKernelTrace(); err != nil {
+				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
-			log.G(ctx).Info("Stopped kernel trace")
+			log.G(ctx).Info("stopped second kernel trace")
 		}()
 	}
+	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Start").Infof("Start Run Task Twice")
 	runLocalStart := time.Now()
@@ -429,9 +441,11 @@ func OverlayFSFullRun(
 	defer cleanupTask()
 
 	// kernel trace first task
+	b.StopTimer()
+	var stopFirstKernelTrace func() error
 	if kerneltrace.IsEnabled() {
-		log.G(ctx).Info("Starting kernel trace")
-		stopKernelTrace, err := kerneltrace.Start(
+		log.G(ctx).Info("starting first kernel trace")
+		stopFirstKernelTrace, err = kerneltrace.Start(
 			ctx,
 			taskDetails.Task(),
 			testName,
@@ -439,19 +453,13 @@ func OverlayFSFullRun(
 			kerneltrace.FirstTask,
 		)
 		if err != nil {
-			fatalf(b, "Failed to start kernel trace: %v\n", err)
+			fatalf(b, "failed to start first kernel trace: %v\n", err)
 		}
-		log.G(ctx).Info("Started kernel trace")
-		defer func() {
-			log.G(ctx).Info("Stopping kernel trace")
-			if err := stopKernelTrace(); err != nil {
-				fatalf(b, "Failed to stop kernel trace: %v\n", err)
-			}
-			log.G(ctx).Info("Stopped kernel trace")
-		}()
+		log.G(ctx).Info("started first kernel trace")
 	} else {
-		log.G(ctx).Info("Kernel trace is disabled")
+		log.G(ctx).Info("kernel trace is disabled")
 	}
+	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
 	runLazyTaskStart := time.Now()
@@ -478,10 +486,19 @@ func OverlayFSFullRun(
 	}
 	defer cleanupTaskSecondRun()
 
+	// stop first kernel trace
+	b.StopTimer()
+	if kerneltrace.IsEnabled() && stopFirstKernelTrace != nil {
+		log.G(ctx).Info("stopping first kernel trace")
+		if err := stopFirstKernelTrace(); err != nil {
+			fatalf(b, "failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first kernel trace")
+	}
 	// kernel trace second task
 	if kerneltrace.IsEnabled() {
-		log.G(ctx).Info("Starting kernel trace")
-		stopKernelTrace, err := kerneltrace.Start(
+		log.G(ctx).Info("starting second kernel trace")
+		stopSecondKernelTrace, err := kerneltrace.Start(
 			ctx,
 			taskDetailsSecondRun.Task(),
 			testName,
@@ -489,17 +506,18 @@ func OverlayFSFullRun(
 			kerneltrace.SecondTask,
 		)
 		if err != nil {
-			fatalf(b, "Failed to start kernel trace: %v\n", err)
+			fatalf(b, "failed to start second kernel trace: %v\n", err)
 		}
-		log.G(ctx).Info("Started kernel trace")
+		log.G(ctx).Info("started second kernel trace")
 		defer func() {
-			log.G(ctx).Info("Stopping kernel trace")
-			if err := stopKernelTrace(); err != nil {
-				fatalf(b, "Failed to stop kernel trace: %v\n", err)
+			log.G(ctx).Info("stopping second kernel trace")
+			if err := stopSecondKernelTrace(); err != nil {
+				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
-			log.G(ctx).Info("Stopped kernel trace")
+			log.G(ctx).Info("stopped second kernel trace")
 		}()
 	}
+	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTaskTwice").WithField("event", "Start").Infof("Start Run Task Twice")
 	runLocalStart := time.Now()
