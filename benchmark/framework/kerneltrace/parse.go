@@ -175,6 +175,14 @@ func getEventsFromFile(path string) ([]*event, error) {
 	scanner := bufio.NewScanner(file)
 	events := []*event{}
 	for scanner.Scan() {
+		line := scanner.Text()
+
+		// reset events list when sentinel is encountered
+		if strings.Contains(line, "__SENTINEL__") {
+			events = []*event{}
+			continue
+		}
+
 		matches := reg.FindStringSubmatch(scanner.Text())
 		if len(matches) == 0 {
 			continue

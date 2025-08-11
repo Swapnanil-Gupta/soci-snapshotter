@@ -108,7 +108,7 @@ func getKernelTraceCmdArgs(
 ) []string {
 	args := []string{
 		"-e", "trace=file,read,write,getxattr,setxattr", // pread, pwrite
-		"-tt",
+		"-ttt",
 		"-y",
 		"-T",
 		"-o",
