@@ -87,17 +87,26 @@ type timingStats struct {
 }
 
 func Parse(outDir string, testname string, numTests int) error {
-	elog := &eventLog{
+	eLog := &eventLog{
 		TestName: testname,
 		Runs:     make([]*eventRun, numTests),
 	}
-	tlog := &timingLog{
+	eLogSentinel := &eventLog{
+		TestName: testname,
+		Runs:     make([]*eventRun, numTests),
+	}
+
+	tLog := &timingLog{
+		TestName: testname,
+		Runs:     make([]*timingRun, numTests),
+	}
+	tLogSentinel := &timingLog{
 		TestName: testname,
 		Runs:     make([]*timingRun, numTests),
 	}
 
 	for i := range numTests {
-		firstEvents, err := getEventsFromFile(
+		firstEvents, firstEventsAfterSentinel, err := getEventsFromFile(
 			getKernelTraceOutPath(outDir, testname, i+1, FirstTask),
 		)
 		if err != nil {
@@ -107,7 +116,12 @@ func Parse(outDir string, testname string, numTests int) error {
 		if err != nil {
 			return err
 		}
-		secondEvents, err := getEventsFromFile(
+		firstSyscallTimingsAfterSentinel, err := getSyscallTimings(firstEventsAfterSentinel)
+		if err != nil {
+			return err
+		}
+
+		secondEvents, secondEventsAfterSentinel, err := getEventsFromFile(
 			getKernelTraceOutPath(outDir, testname, i+1, SecondTask),
 		)
 		if err != nil {
@@ -117,7 +131,12 @@ func Parse(outDir string, testname string, numTests int) error {
 		if err != nil {
 			return err
 		}
-		elog.Runs[i] = &eventRun{
+		secondSyscallTimingsAfterSentinel, err := getSyscallTimings(secondEventsAfterSentinel)
+		if err != nil {
+			return err
+		}
+
+		eLog.Runs[i] = &eventRun{
 			Tasks: []*eventTask{
 				{
 					Events: firstEvents,
@@ -127,7 +146,18 @@ func Parse(outDir string, testname string, numTests int) error {
 				},
 			},
 		}
-		tlog.Runs[i] = &timingRun{
+		eLogSentinel.Runs[i] = &eventRun{
+			Tasks: []*eventTask{
+				{
+					Events: firstEventsAfterSentinel,
+				},
+				{
+					Events: secondEventsAfterSentinel,
+				},
+			},
+		}
+
+		tLog.Runs[i] = &timingRun{
 			Tasks: []*timingTask{
 				{
 					SyscallTimings: firstSyscallTimings,
@@ -137,34 +167,59 @@ func Parse(outDir string, testname string, numTests int) error {
 				},
 			},
 		}
+		tLogSentinel.Runs[i] = &timingRun{
+			Tasks: []*timingTask{
+				{
+					SyscallTimings: firstSyscallTimingsAfterSentinel,
+				},
+				{
+					SyscallTimings: secondSyscallTimingsAfterSentinel,
+				},
+			},
+		}
 	}
 
-	jsonElogs, err := json.MarshalIndent(elog, " ", " ")
+	jsonELogs, err := json.MarshalIndent(eLog, " ", " ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events.json", outDir, testname), jsonElogs, 0644); err != nil {
-		return err
-	}
-	jsonTlogs, err := json.MarshalIndent(tlog, " ", " ")
+	jsonELogsSentinel, err := json.MarshalIndent(eLogSentinel, " ", " ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_timings.json", outDir, testname), jsonTlogs, 0644); err != nil {
+	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events.json", outDir, testname), jsonELogs, 0644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events_after_sentinel.json", outDir, testname), jsonELogsSentinel, 0644); err != nil {
+		return err
+	}
+
+	jsonTLogs, err := json.MarshalIndent(tLog, " ", " ")
+	if err != nil {
+		return err
+	}
+	jsonTLogsSentinel, err := json.MarshalIndent(tLogSentinel, " ", " ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_timings.json", outDir, testname), jsonTLogs, 0644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_timings_after_sentinel.json", outDir, testname), jsonTLogsSentinel, 0644); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func getEventsFromFile(path string) ([]*event, error) {
+func getEventsFromFile(path string) ([]*event, []*event, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer file.Close()
 
@@ -173,13 +228,14 @@ func getEventsFromFile(path string) ([]*event, error) {
 		`^(?<pid>\d+)\s+(?<timestamp>[\d\.:]+)\s+(?<syscall>[a-z]+)\((?<args>.+)\)\s+=\s+(?<ret>.+)\s+<(?<duration>\d+\.\d{6})>$`,
 	)
 	scanner := bufio.NewScanner(file)
-	events := []*event{}
+	allEvents := []*event{}
+	eventsAfterSentinel := []*event{}
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// reset events list when sentinel is encountered
+		// reset sentinel event list when sentinel is encountered
 		if strings.Contains(line, "__SENTINEL__") {
-			events = []*event{}
+			eventsAfterSentinel = []*event{}
 			continue
 		}
 
@@ -199,16 +255,24 @@ func getEventsFromFile(path string) ([]*event, error) {
 		if err != nil {
 			duration = -1
 		}
-		events = append(events, &event{
+		e := &event{
 			Timestamp: getMapVal(res, "timestamp"),
 			Pid:       getMapVal(res, "pid"),
 			Syscall:   getMapVal(res, "syscall"),
 			Args:      getMapVal(res, "args"),
 			Ret:       getMapVal(res, "ret"),
 			Duration:  duration,
-		})
+		}
+		allEvents = append(allEvents, e)
+		eventsAfterSentinel = append(eventsAfterSentinel, e)
 	}
-	return events, nil
+
+	if len(eventsAfterSentinel) == len(allEvents) {
+		// no sentinel encountered, so set to nil
+		eventsAfterSentinel = nil
+	}
+
+	return allEvents, eventsAfterSentinel, nil
 }
 
 func getMapVal(regMap map[string]string, key string) string {
