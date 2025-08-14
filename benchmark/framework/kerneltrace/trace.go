@@ -53,6 +53,7 @@ func Start(
 		return nil, err
 	}
 
+	// Start strace
 	traceCmd := exec.Command("strace", getKernelTraceCmdArgs(
 		pids,
 		outDir,
@@ -65,7 +66,53 @@ func Start(
 		return nil, err
 	}
 
+	// Start detailed monitoring with separate log files
+	var monitorCmds []*exec.Cmd
+
+	// Detailed disk I/O monitoring
+	diskioCmd := exec.Command("bash", "-c", fmt.Sprintf(
+		"iostat -x -d 1 > %s/%s_diskio_run_%d_task_%d.log 2>&1 &",
+		outDir, testName, runNum, taskNum+1))
+	if err := diskioCmd.Start(); err == nil {
+		monitorCmds = append(monitorCmds, diskioCmd)
+	}
+
+	// Detailed process monitoring for each PID
+	for _, pid := range pids {
+		pidstatCmd := exec.Command("bash", "-c", fmt.Sprintf(
+			"pidstat -r -d -u -w -p %d 1 > %s/%s_process_%d_run_%d_task_%d.log 2>&1 &",
+			pid, outDir, testName, pid, runNum, taskNum+1))
+		if err := pidstatCmd.Start(); err == nil {
+			monitorCmds = append(monitorCmds, pidstatCmd)
+		}
+	}
+
+	// Detailed network monitoring
+	networkCmd := exec.Command("bash", "-c", fmt.Sprintf(
+		"while true; do echo \"=== $(date) ===\"; ss -tuln -i; echo; sleep 1; done > %s/%s_network_run_%d_task_%d.log 2>&1 &",
+		outDir, testName, runNum, taskNum+1))
+	if err := networkCmd.Start(); err == nil {
+		monitorCmds = append(monitorCmds, networkCmd)
+	}
+
+	// Memory usage monitoring
+	memoryCmd := exec.Command("bash", "-c", fmt.Sprintf(
+		"while true; do echo \"=== $(date) ===\"; free -m; cat /proc/meminfo | head -10; echo; sleep 1; done > %s/%s_memory_run_%d_task_%d.log 2>&1 &",
+		outDir, testName, runNum, taskNum+1))
+	if err := memoryCmd.Start(); err == nil {
+		monitorCmds = append(monitorCmds, memoryCmd)
+	}
+
+	log.G(ctx).Infof("Started %d monitoring processes, logs in: %s", len(monitorCmds), outDir)
+
 	return func() error {
+		// Kill monitors
+		for _, cmd := range monitorCmds {
+			if cmd.Process != nil {
+				cmd.Process.Kill()
+			}
+		}
+		// Stop strace
 		return stop(traceCmd)
 	}, nil
 }
