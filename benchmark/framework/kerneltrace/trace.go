@@ -22,7 +22,6 @@ import (
 	"os/exec"
 
 	"github.com/containerd/containerd"
-	"github.com/containerd/log"
 )
 
 var (
@@ -59,8 +58,8 @@ func Start(
 		testName,
 		taskNum,
 	)...)
-	traceCmd.Stdout = log.G(ctx).Writer()
-	traceCmd.Stderr = log.G(ctx).Writer()
+	// traceCmd.Stdout = log.G(ctx).Writer()
+	// traceCmd.Stderr = log.G(ctx).Writer()
 	if err := traceCmd.Start(); err != nil {
 		return nil, err
 	}
