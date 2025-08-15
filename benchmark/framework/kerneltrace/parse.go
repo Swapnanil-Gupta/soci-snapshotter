@@ -86,6 +86,21 @@ type timingStats struct {
 	Pct90 float64 `json:"pct90"`
 }
 
+type unfinishedEvent struct {
+	Pid       string
+	Timestamp string
+	Syscall   string
+	Args      string
+}
+type resumedEvent struct {
+	Pid       string
+	Timestamp string
+	Syscall   string
+	Args      string
+	Ret       string
+	Duration  float64
+}
+
 func Parse(outDir string, testname string, numTests int) error {
 	eLog := &eventLog{
 		TestName: testname,
@@ -223,48 +238,83 @@ func getEventsFromFile(path string) ([]*event, []*event, error) {
 	}
 	defer file.Close()
 
-	// example : `12856 21:21:18.383943 newfstatat(3, "", {st_mode=S_IFREG|0755, st_size=1922136, ...}, AT_EMPTY_PATH) = 0 <0.000196>`
-	reg := regexp.MustCompile(
+	// example: "6766  1755041143.660596 access("/etc/ld.so.preload", R_OK) = -1 ENOENT (No such file or directory) <0.000624>"
+	finishedSyscallReg := regexp.MustCompile(
 		`^(?<pid>\d+)\s+(?<timestamp>[\d\.:]+)\s+(?<syscall>[a-z]+)\((?<args>.+)\)\s+=\s+(?<ret>.+)\s+<(?<duration>\d+\.\d{6})>$`,
 	)
+	// example: "6766 1755041143.584802 execve("/usr/bin/python", ["python", "./train.py"], 0xc0001ae4b0 /* 4 vars */ <unfinished ...>"
+	unfinishedSyscallReg := regexp.MustCompile(
+		`^(?<pid>\d+)\s+(?<timestamp>[\d\.:]+)\s+(?<syscall>[a-z]+)\((?<args>.+)\s<unfinished\s\.\.\.>$`,
+	)
+	// example: "6766 1755041143.659896 <... execve resumed> ) = 0 <0.074956>"
+	resumedSyscallReg := regexp.MustCompile(
+		`^(?<pid>\d+)\s+(?<timestamp>[\d:\.]+)\s+<\.+\s+(?<syscall>[a-z]+)\s+resumed>(?<args>.+)\)\s+=\s+(?<ret>.+)\s+<(?<duration>\d\.\d{6})>`,
+	)
+
 	scanner := bufio.NewScanner(file)
 	allEvents := []*event{}
 	eventsAfterSentinel := []*event{}
+	unfinishedMap := make(map[string]*unfinishedEvent)
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// reset sentinel event list when sentinel is encountered
+		// reset after sentinel events list when sentinel is encountered
 		if strings.Contains(line, "__SENTINEL__") {
 			eventsAfterSentinel = []*event{}
 			continue
 		}
-
-		matches := reg.FindStringSubmatch(scanner.Text())
-		if len(matches) == 0 {
-			continue
-		}
-		res := make(map[string]string)
-		for i, name := range reg.SubexpNames() {
-			if i == 0 || name == "" {
-				continue
+		if finishedMatches := finishedSyscallReg.FindStringSubmatch(line); len(finishedMatches) > 0 {
+			m := getMapFromMatches(finishedSyscallReg, finishedMatches)
+			duration, err := strconv.ParseFloat(getMapVal(m, "duration"), 64)
+			if err != nil {
+				duration = -1
 			}
-			res[name] = matches[i]
+			e := &event{
+				Timestamp: getMapVal(m, "timestamp"),
+				Pid:       getMapVal(m, "pid"),
+				Syscall:   getMapVal(m, "syscall"),
+				Args:      getMapVal(m, "args"),
+				Ret:       getMapVal(m, "ret"),
+				Duration:  duration,
+			}
+			allEvents = append(allEvents, e)
+			eventsAfterSentinel = append(eventsAfterSentinel, e)
+		} else if unfinishedMatches := unfinishedSyscallReg.FindStringSubmatch(line); len(unfinishedMatches) > 0 {
+			m := getMapFromMatches(unfinishedSyscallReg, unfinishedMatches)
+			ue := &unfinishedEvent{
+				Pid:       getMapVal(m, "pid"),
+				Timestamp: getMapVal(m, "timestamp"),
+				Syscall:   getMapVal(m, "syscall"),
+				Args:      getMapVal(m, "args"),
+			}
+			unfinishedMap[ue.Pid+"_"+ue.Syscall] = ue
+		} else if resumedMatches := resumedSyscallReg.FindStringSubmatch(line); len(resumedMatches) > 0 {
+			m := getMapFromMatches(resumedSyscallReg, resumedMatches)
+			duration, err := strconv.ParseFloat(getMapVal(m, "duration"), 64)
+			if err != nil {
+				duration = -1
+			}
+			re := &resumedEvent{
+				Pid:       getMapVal(m, "pid"),
+				Timestamp: getMapVal(m, "timestamp"),
+				Syscall:   getMapVal(m, "syscall"),
+				Args:      getMapVal(m, "args"),
+				Ret:       getMapVal(m, "ret"),
+				Duration:  duration,
+			}
+			if ue, ok := unfinishedMap[re.Pid+"_"+re.Syscall]; ok {
+				e := &event{
+					Timestamp: ue.Timestamp,
+					Pid:       ue.Pid,
+					Syscall:   ue.Syscall,
+					Args:      ue.Args + " " + re.Args,
+					Ret:       re.Ret,
+					Duration:  re.Duration,
+				}
+				allEvents = append(allEvents, e)
+				eventsAfterSentinel = append(eventsAfterSentinel, e)
+			}
 		}
-
-		duration, err := strconv.ParseFloat(getMapVal(res, "duration"), 64)
-		if err != nil {
-			duration = -1
-		}
-		e := &event{
-			Timestamp: getMapVal(res, "timestamp"),
-			Pid:       getMapVal(res, "pid"),
-			Syscall:   getMapVal(res, "syscall"),
-			Args:      getMapVal(res, "args"),
-			Ret:       getMapVal(res, "ret"),
-			Duration:  duration,
-		}
-		allEvents = append(allEvents, e)
-		eventsAfterSentinel = append(eventsAfterSentinel, e)
 	}
 
 	if len(eventsAfterSentinel) == len(allEvents) {
@@ -275,8 +325,19 @@ func getEventsFromFile(path string) ([]*event, []*event, error) {
 	return allEvents, eventsAfterSentinel, nil
 }
 
-func getMapVal(regMap map[string]string, key string) string {
-	val, ok := regMap[key]
+func getMapFromMatches(reg *regexp.Regexp, matches []string) map[string]string {
+	res := make(map[string]string)
+	for i, name := range reg.SubexpNames() {
+		if i == 0 || name == "" {
+			continue
+		}
+		res[name] = matches[i]
+	}
+	return res
+}
+
+func getMapVal(m map[string]string, key string) string {
+	val, ok := m[key]
 	if !ok {
 		return ""
 	}
