@@ -25,8 +25,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/montanaflynn/stats"
 )
 
 type eventLog struct {
@@ -51,41 +49,6 @@ type event struct {
 	Duration  float64 `json:"duration"`
 }
 
-type timingLog struct {
-	TestName string       `json:"test_name"`
-	Runs     []*timingRun `json:"runs"`
-}
-
-type timingRun struct {
-	Tasks []*timingTask `json:"tasks"`
-}
-
-type timingTask struct {
-	SyscallTimings []*syscallTiming `json:"syscall_timings"`
-}
-
-type syscallTiming struct {
-	Syscall     string       `json:"syscall"`
-	Timings     []*timing    `json:"timings"`
-	TimingStats *timingStats `json:"timing_stats"`
-}
-
-type timing struct {
-	Timestamp string  `json:"timestamp"`
-	Duration  float64 `json:"duration"`
-}
-
-type timingStats struct {
-	Sum   float64 `json:"sum"`
-	Min   float64 `json:"min"`
-	Max   float64 `json:"max"`
-	Mean  float64 `json:"mean"`
-	Pct25 float64 `json:"pct25"`
-	Pct50 float64 `json:"pct50"`
-	Pct75 float64 `json:"pct75"`
-	Pct90 float64 `json:"pct90"`
-}
-
 type unfinishedEvent struct {
 	Pid       string
 	Timestamp string
@@ -102,56 +65,23 @@ type resumedEvent struct {
 }
 
 func Parse(outDir string, testname string, numTests int) error {
-	eLog := &eventLog{
+	events := &eventLog{
 		TestName: testname,
 		Runs:     make([]*eventRun, numTests),
 	}
-	eLogSentinel := &eventLog{
+	eventsAfterSentinel := &eventLog{
 		TestName: testname,
 		Runs:     make([]*eventRun, numTests),
-	}
-
-	tLog := &timingLog{
-		TestName: testname,
-		Runs:     make([]*timingRun, numTests),
-	}
-	tLogSentinel := &timingLog{
-		TestName: testname,
-		Runs:     make([]*timingRun, numTests),
 	}
 
 	for i := range numTests {
-		firstEvents, firstEventsAfterSentinel, err := getEventsFromFile(
+		firstEvents, firstEventsAfterSentinel := getEventsFromFile(
 			getKernelTraceOutPath(outDir, testname, i+1, FirstTask),
 		)
-		if err != nil {
-			return err
-		}
-		firstSyscallTimings, err := getSyscallTimings(firstEvents)
-		if err != nil {
-			return err
-		}
-		firstSyscallTimingsAfterSentinel, err := getSyscallTimings(firstEventsAfterSentinel)
-		if err != nil {
-			return err
-		}
-
-		secondEvents, secondEventsAfterSentinel, err := getEventsFromFile(
+		secondEvents, secondEventsAfterSentinel := getEventsFromFile(
 			getKernelTraceOutPath(outDir, testname, i+1, SecondTask),
 		)
-		if err != nil {
-			return err
-		}
-		secondSyscallTimings, err := getSyscallTimings(secondEvents)
-		if err != nil {
-			return err
-		}
-		secondSyscallTimingsAfterSentinel, err := getSyscallTimings(secondEventsAfterSentinel)
-		if err != nil {
-			return err
-		}
-
-		eLog.Runs[i] = &eventRun{
+		events.Runs[i] = &eventRun{
 			Tasks: []*eventTask{
 				{
 					Events: firstEvents,
@@ -161,7 +91,7 @@ func Parse(outDir string, testname string, numTests int) error {
 				},
 			},
 		}
-		eLogSentinel.Runs[i] = &eventRun{
+		eventsAfterSentinel.Runs[i] = &eventRun{
 			Tasks: []*eventTask{
 				{
 					Events: firstEventsAfterSentinel,
@@ -171,70 +101,34 @@ func Parse(outDir string, testname string, numTests int) error {
 				},
 			},
 		}
-
-		tLog.Runs[i] = &timingRun{
-			Tasks: []*timingTask{
-				{
-					SyscallTimings: firstSyscallTimings,
-				},
-				{
-					SyscallTimings: secondSyscallTimings,
-				},
-			},
-		}
-		tLogSentinel.Runs[i] = &timingRun{
-			Tasks: []*timingTask{
-				{
-					SyscallTimings: firstSyscallTimingsAfterSentinel,
-				},
-				{
-					SyscallTimings: secondSyscallTimingsAfterSentinel,
-				},
-			},
-		}
 	}
 
-	jsonELogs, err := json.MarshalIndent(eLog, " ", " ")
+	jsonEventLogs, err := json.MarshalIndent(events, " ", " ")
 	if err != nil {
 		return err
 	}
-	jsonELogsSentinel, err := json.MarshalIndent(eLogSentinel, " ", " ")
+	jsonEventLogsAfterSentinel, err := json.MarshalIndent(eventsAfterSentinel, " ", " ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events.json", outDir, testname), jsonELogs, 0644); err != nil {
+	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events.json", outDir, testname), jsonEventLogs, 0644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events_after_sentinel.json", outDir, testname), jsonELogsSentinel, 0644); err != nil {
-		return err
-	}
-
-	jsonTLogs, err := json.MarshalIndent(tLog, " ", " ")
-	if err != nil {
-		return err
-	}
-	jsonTLogsSentinel, err := json.MarshalIndent(tLogSentinel, " ", " ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_timings.json", outDir, testname), jsonTLogs, 0644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_timings_after_sentinel.json", outDir, testname), jsonTLogsSentinel, 0644); err != nil {
+	if err := os.WriteFile(fmt.Sprintf("%s/%s_parsed_events_after_sentinel.json", outDir, testname), jsonEventLogsAfterSentinel, 0644); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func getEventsFromFile(path string) ([]*event, []*event, error) {
+func getEventsFromFile(path string) ([]*event, []*event) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return nil, nil, nil
+		return []*event{}, []*event{}
 	}
 
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, nil, err
+		return []*event{}, []*event{}
 	}
 	defer file.Close()
 
@@ -267,7 +161,7 @@ func getEventsFromFile(path string) ([]*event, []*event, error) {
 			m := getMapFromMatches(finishedSyscallReg, finishedMatches)
 			duration, err := strconv.ParseFloat(getMapVal(m, "duration"), 64)
 			if err != nil {
-				duration = -1
+				duration = 0
 			}
 			e := &event{
 				Timestamp: getMapVal(m, "timestamp"),
@@ -292,7 +186,7 @@ func getEventsFromFile(path string) ([]*event, []*event, error) {
 			m := getMapFromMatches(resumedSyscallReg, resumedMatches)
 			duration, err := strconv.ParseFloat(getMapVal(m, "duration"), 64)
 			if err != nil {
-				duration = -1
+				duration = 0
 			}
 			re := &resumedEvent{
 				Pid:       getMapVal(m, "pid"),
@@ -319,10 +213,10 @@ func getEventsFromFile(path string) ([]*event, []*event, error) {
 
 	if len(eventsAfterSentinel) == len(allEvents) {
 		// no sentinel encountered, so set to nil
-		eventsAfterSentinel = nil
+		eventsAfterSentinel = []*event{}
 	}
 
-	return allEvents, eventsAfterSentinel, nil
+	return allEvents, eventsAfterSentinel
 }
 
 func getMapFromMatches(reg *regexp.Regexp, matches []string) map[string]string {
@@ -342,89 +236,4 @@ func getMapVal(m map[string]string, key string) string {
 		return ""
 	}
 	return strings.Trim(val, " ")
-}
-
-func getSyscallTimings(events []*event) ([]*syscallTiming, error) {
-	syscallTimingsMap := make(map[string][]*timing)
-	for _, event := range events {
-		syscall := event.Syscall
-		timestamp := event.Timestamp
-		duration := event.Duration
-		if syscall == "" || timestamp == "" || duration == -1 {
-			continue
-		}
-		if _, ok := syscallTimingsMap[syscall]; ok {
-			syscallTimingsMap[syscall] = append(syscallTimingsMap[syscall], &timing{
-				Timestamp: timestamp,
-				Duration:  duration,
-			})
-		} else {
-			syscallTimingsMap[syscall] = []*timing{
-				{
-					Timestamp: timestamp,
-					Duration:  duration,
-				},
-			}
-		}
-	}
-
-	timings := []*syscallTiming{}
-	for k, v := range syscallTimingsMap {
-		s := getTimingStats(v)
-		timings = append(timings, &syscallTiming{
-			Syscall:     k,
-			Timings:     v,
-			TimingStats: s,
-		})
-	}
-	return timings, nil
-}
-
-func getTimingStats(timings []*timing) *timingStats {
-	durations := []float64{}
-	for _, t := range timings {
-		durations = append(durations, t.Duration)
-	}
-	sum, err := stats.Sum(durations)
-	if err != nil {
-		sum = -1
-	}
-	min, err := stats.Min(durations)
-	if err != nil {
-		min = -1
-	}
-	max, err := stats.Max(durations)
-	if err != nil {
-		max = -1
-	}
-	mean, err := stats.Mean(durations)
-	if err != nil {
-		mean = -1
-	}
-	pct25, err := stats.Percentile(durations, 25)
-	if err != nil {
-		pct25 = -1
-	}
-	pct50, err := stats.Percentile(durations, 50)
-	if err != nil {
-		pct50 = -1
-	}
-	pct75, err := stats.Percentile(durations, 75)
-	if err != nil {
-		pct75 = -1
-	}
-	pct90, err := stats.Percentile(durations, 90)
-	if err != nil {
-		pct90 = -1
-	}
-	return &timingStats{
-		Sum:   sum,
-		Min:   min,
-		Max:   max,
-		Mean:  mean,
-		Pct25: pct25,
-		Pct50: pct50,
-		Pct75: pct75,
-		Pct90: pct90,
-	}
 }
