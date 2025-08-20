@@ -198,9 +198,9 @@ func getEventsFromFile(path string) ([]*event, []*event) {
 			}
 			if ue, ok := unfinishedMap[re.Pid+"_"+re.Syscall]; ok {
 				e := &event{
-					Timestamp: ue.Timestamp,
-					Pid:       ue.Pid,
-					Syscall:   ue.Syscall,
+					Timestamp: re.Timestamp,
+					Pid:       re.Pid,
+					Syscall:   re.Syscall,
 					Args:      ue.Args + " " + re.Args,
 					Ret:       re.Ret,
 					Duration:  re.Duration,
