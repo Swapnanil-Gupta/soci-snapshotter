@@ -42,11 +42,11 @@ type eventTask struct {
 
 type event struct {
 	Timestamp string  `json:"timestamp"`
-	Pid       string  `json:"pid"`
 	Syscall   string  `json:"syscall"`
-	Args      string  `json:"args"`
-	Ret       string  `json:"ret"`
 	Duration  float64 `json:"duration"`
+	// Pid       string  `json:"pid"`
+	// Args      string  `json:"args"`
+	// Ret       string  `json:"ret"`
 }
 
 type unfinishedEvent struct {
@@ -165,11 +165,11 @@ func getEventsFromFile(path string) ([]*event, []*event) {
 			}
 			e := &event{
 				Timestamp: getMapVal(m, "timestamp"),
-				Pid:       getMapVal(m, "pid"),
 				Syscall:   getMapVal(m, "syscall"),
-				Args:      getMapVal(m, "args"),
-				Ret:       getMapVal(m, "ret"),
 				Duration:  duration,
+				// Pid:       getMapVal(m, "pid"),
+				// Args:      getMapVal(m, "args"),
+				// Ret:       getMapVal(m, "ret"),
 			}
 			allEvents = append(allEvents, e)
 			eventsAfterSentinel = append(eventsAfterSentinel, e)
@@ -196,14 +196,14 @@ func getEventsFromFile(path string) ([]*event, []*event) {
 				Ret:       getMapVal(m, "ret"),
 				Duration:  duration,
 			}
-			if ue, ok := unfinishedMap[re.Pid+"_"+re.Syscall]; ok {
+			if _, ok := unfinishedMap[re.Pid+"_"+re.Syscall]; ok {
 				e := &event{
 					Timestamp: re.Timestamp,
-					Pid:       re.Pid,
 					Syscall:   re.Syscall,
-					Args:      ue.Args + " " + re.Args,
-					Ret:       re.Ret,
 					Duration:  re.Duration,
+					// Pid:       re.Pid,
+					// Args:      ue.Args + " " + re.Args,
+					// Ret:       re.Ret,
 				}
 				allEvents = append(allEvents, e)
 				eventsAfterSentinel = append(eventsAfterSentinel, e)
