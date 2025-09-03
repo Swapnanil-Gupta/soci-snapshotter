@@ -56,6 +56,7 @@ import (
 	commonmetrics "github.com/awslabs/soci-snapshotter/fs/metrics/common"
 	"github.com/awslabs/soci-snapshotter/fs/reader"
 	"github.com/awslabs/soci-snapshotter/fs/remote"
+	spanmanager "github.com/awslabs/soci-snapshotter/fs/span-manager"
 	"github.com/awslabs/soci-snapshotter/idtools"
 	"github.com/awslabs/soci-snapshotter/metadata"
 	"github.com/containerd/log"
@@ -705,9 +706,11 @@ type statJSON struct {
 	Error  string `json:"error,omitempty"`
 	Digest string `json:"digest"`
 	// URL is excluded for potential security reason
-	Size           int64   `json:"size"`
-	FetchedSize    int64   `json:"fetchedSize"`
-	FetchedPercent float64 `json:"fetchedPercent"` // Fetched / Size * 100.0
+	Size                   int64   `json:"size"`
+	FetchedSize            int64   `json:"fetchedSize"`
+	FetchedPercent         float64 `json:"fetchedPercent"` // Fetched / Size * 100.0
+	TotalSpans             uint64  `json:"total_spans"`
+	TotalDecompressedSpans uint64  `json:"total_decompressed_spans"`
 }
 
 // statFile is a file which contain something to be reported from this layer.
@@ -792,6 +795,8 @@ func (sf *statFile) attr(out *fuse.Attr) (fusefs.StableAttr, syscall.Errno) {
 func (sf *statFile) updateStatUnlocked() ([]byte, error) {
 	sf.statJSON.FetchedSize = sf.blob.FetchedSize()
 	sf.statJSON.FetchedPercent = float64(sf.statJSON.FetchedSize) / float64(sf.statJSON.Size) * 100.0
+	sf.statJSON.TotalSpans = spanmanager.TotalSpans()
+	sf.statJSON.TotalDecompressedSpans = spanmanager.TotalDecompressedSpans()
 	j, err := json.Marshal(&sf.statJSON)
 	if err != nil {
 		return nil, err

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync/atomic"
 
 	"github.com/awslabs/soci-snapshotter/cache"
 	"github.com/awslabs/soci-snapshotter/util/ioutils"
@@ -38,6 +39,9 @@ var (
 	ErrSpanNotAvailable    = errors.New("span not available in cache")
 	ErrIncorrectSpanDigest = errors.New("span digests do not match")
 	ErrExceedMaxSpan       = errors.New("span id larger than max span id")
+
+	totalSpans        atomic.Uint64
+	decompressedSpans atomic.Uint64
 )
 
 // SpanManager fetches and caches spans of a given layer.
@@ -64,9 +68,16 @@ type spanInfo struct {
 	spanIndexInBuf []compression.Offset
 }
 
+func TotalSpans() uint64 {
+	return totalSpans.Load()
+}
+
+func TotalDecompressedSpans() uint64 {
+	return decompressedSpans.Load()
+}
+
 // New creates a SpanManager with given ztoc and content reader, and builds all
 // spans based on the ztoc.
-
 // TODO: return errors/nil objects on failure
 func New(ztoc *ztoc.Ztoc, r *io.SectionReader, cache cache.BlobCache, retries int, cacheOpt ...cache.Option) *SpanManager {
 	index, err := ztoc.Zinfo()
@@ -85,7 +96,8 @@ func New(ztoc *ztoc.Ztoc, r *io.SectionReader, cache cache.BlobCache, retries in
 		log.L.Errorf("unable to verify %v header: %v", ztoc.CompressionAlgorithm, err)
 	}
 
-	spans := make([]*span, ztoc.MaxSpanID+1)
+	spanCount := ztoc.MaxSpanID + 1
+	spans := make([]*span, spanCount)
 	m := &SpanManager{
 		cache:                             cache,
 		cacheOpt:                          cacheOpt,
@@ -103,6 +115,7 @@ func New(ztoc *ztoc.Ztoc, r *io.SectionReader, cache cache.BlobCache, retries in
 		m.Close()
 	})
 
+	totalSpans.Add(uint64(spanCount))
 	return m
 }
 
@@ -384,6 +397,9 @@ func (m *SpanManager) uncompressSpan(s *span, compressedBuf []byte) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
+
+	decompressedSpans.Add(1)
+
 	return bytes, nil
 }
 
