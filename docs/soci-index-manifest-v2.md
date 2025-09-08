@@ -42,7 +42,7 @@ See [the getting started guide](./getting-started.md) for more information.
 
 There are some use-cases where the dynamic nature of SOCI Index Manifest v1 adds significant value. For those users, SOCI Index Manifest v1 is still available in the SOCI snapshotter; however, it is disabled by default. By re-enabling it, you should be aware that adding a SOCI index to an existing image can change the runtime characteristics of the image. We strongly recommend that you migrate to SOCI-enabled images and SOCI Index Manifest V2 which immutably binds a SOCI index to a new image and allows you to manage changes to your production workloads through deployments, just like you would for any other change.
 
-If you would like to enable SOCI v1, you can add the following to the soci snapshotter config (located at `/var/lib/soci-snapshotter-grpc/config.toml`):
+If you would like to enable SOCI v1, you can add the following to the soci snapshotter config (located at `/etc/soci-snapshotter-grpc/config.toml`):
 
 ```
 [pull_modes]
