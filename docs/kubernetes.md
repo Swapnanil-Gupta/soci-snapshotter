@@ -22,6 +22,8 @@ To configure containerd to launch containers with SOCI, add the following snippe
 #### containerd 1.x configuration
 
 ```toml
+# containerd v1.x uses version 1 by default
+version = 2
 [proxy_plugins.soci]
 type = "snapshot"
 address = "/run/soci-snapshotter-grpc/soci-snapshotter-grpc.sock"
