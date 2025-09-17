@@ -24,6 +24,7 @@ import (
 
 	"github.com/awslabs/soci-snapshotter/benchmark"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/cpumemtrace"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 )
 
@@ -38,7 +39,10 @@ func main() {
 		jsonFile                string
 		showCom                 bool
 		traceKernelFileAccess   bool
+		traceSociCpuMemUsage    bool
+		cpuMemTraceIntervalMs   int
 		kernelTraceScriptOutDir string
+		sociCpuMemTraceOutDir   string
 		imageList               []benchmark.ImageDescriptor
 		err                     error
 		commit                  string
@@ -46,7 +50,9 @@ func main() {
 
 	flag.BoolVar(&showCom, "show-commit", false, "tag the commit hash to the benchmark results")
 	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
+	flag.BoolVar(&traceSociCpuMemUsage, "trace-soci-cpu-mem-usage", false, "Trace CPU & memory usage of SOCI.")
 	flag.IntVar(&numberOfTests, "count", 5, "Describes the number of runs a benchmarker should run. Default: 5")
+	flag.IntVar(&cpuMemTraceIntervalMs, "cpu-mem-trace-interval-ms", 1000, "Describes the interval of cpu/mem tracing in milliseconds. Default: 1000ms = 1s")
 	flag.StringVar(&jsonFile, "f", "default", "Path to a json file describing image details in this order ['Name','Image ref', 'Ready line', 'manifest ref']")
 
 	flag.Parse()
@@ -67,7 +73,18 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		kerneltrace.Enable()
+	}
+
+	if traceSociCpuMemUsage {
+		sociCpuMemTraceOutDir = outputDir + "/cpu_mem_trace_out"
+		err := os.RemoveAll(sociCpuMemTraceOutDir)
+		if err != nil {
+			panic(err)
+		}
+		err = os.MkdirAll(sociCpuMemTraceOutDir, 0755)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	if jsonFile == "default" {
@@ -101,17 +118,19 @@ func main() {
 		overlayFsTestDriver := framework.BenchmarkTestDriver{
 			TestName:      overlayFsTestName,
 			NumberOfTests: numberOfTests,
-			TestFunction: func(b *testing.B) {
-				benchmark.OverlayFSFullRun(ctx, b, overlayFsTestName, image)
+			TestFunction: func(b *testing.B, testNum int) {
+				benchmark.OverlayFSFullRun(
+					ctx,
+					b,
+					overlayFsTestName,
+					testNum,
+					image,
+					traceKernelFileAccess,
+				)
 			},
 		}
 		if traceKernelFileAccess {
-			overlayFsTestDriver.BeforeEachFunctions = append(overlayFsTestDriver.BeforeEachFunctions, func() error {
-				kerneltrace.IncRunNum()
-				return nil
-			})
 			overlayFsTestDriver.AfterAllFunctions = append(overlayFsTestDriver.AfterAllFunctions, func() error {
-				kerneltrace.ResetRunNum()
 				return kerneltrace.Parse(kernelTraceScriptOutDir, overlayFsTestName, numberOfTests)
 			})
 		}
@@ -121,18 +140,27 @@ func main() {
 		sociTestDriver := framework.BenchmarkTestDriver{
 			TestName:      sociTestName,
 			NumberOfTests: numberOfTests,
-			TestFunction: func(b *testing.B) {
-				benchmark.SociFullRun(ctx, b, "SociFull"+shortName, image)
+			TestFunction: func(b *testing.B, testNum int) {
+				benchmark.SociFullRun(
+					ctx,
+					b,
+					"SociFull"+shortName,
+					testNum,
+					image,
+					traceKernelFileAccess,
+					traceSociCpuMemUsage,
+					cpuMemTraceIntervalMs,
+				)
 			},
 		}
 		if traceKernelFileAccess {
-			sociTestDriver.BeforeEachFunctions = append(sociTestDriver.BeforeEachFunctions, func() error {
-				kerneltrace.IncRunNum()
-				return nil
-			})
 			sociTestDriver.AfterAllFunctions = append(sociTestDriver.AfterAllFunctions, func() error {
-				kerneltrace.ResetRunNum()
 				return kerneltrace.Parse(kernelTraceScriptOutDir, sociTestName, numberOfTests)
+			})
+		}
+		if traceSociCpuMemUsage {
+			sociTestDriver.AfterAllFunctions = append(sociTestDriver.AfterAllFunctions, func() error {
+				return cpumemtrace.Parse(sociCpuMemTraceOutDir, sociTestName, numberOfTests)
 			})
 		}
 		drivers = append(drivers, sociTestDriver)
@@ -141,18 +169,27 @@ func main() {
 		sociFastPullTestDriver := framework.BenchmarkTestDriver{
 			TestName:      sociFastPullTestName,
 			NumberOfTests: numberOfTests,
-			TestFunction: func(b *testing.B) {
-				benchmark.SociFastPullFullRun(ctx, b, sociFastPullTestName, image)
+			TestFunction: func(b *testing.B, testNum int) {
+				benchmark.SociFastPullFullRun(
+					ctx,
+					b,
+					sociFastPullTestName,
+					testNum,
+					image,
+					traceKernelFileAccess,
+					traceSociCpuMemUsage,
+					cpuMemTraceIntervalMs,
+				)
 			},
 		}
 		if traceKernelFileAccess {
-			sociFastPullTestDriver.BeforeEachFunctions = append(sociFastPullTestDriver.BeforeEachFunctions, func() error {
-				kerneltrace.IncRunNum()
-				return nil
-			})
 			sociFastPullTestDriver.AfterAllFunctions = append(sociFastPullTestDriver.AfterAllFunctions, func() error {
-				kerneltrace.ResetRunNum()
 				return kerneltrace.Parse(kernelTraceScriptOutDir, sociFastPullTestName, numberOfTests)
+			})
+		}
+		if traceSociCpuMemUsage {
+			sociFastPullTestDriver.AfterAllFunctions = append(sociFastPullTestDriver.AfterAllFunctions, func() error {
+				return cpumemtrace.Parse(sociCpuMemTraceOutDir, sociFastPullTestName, numberOfTests)
 			})
 		}
 		drivers = append(drivers, sociFastPullTestDriver)

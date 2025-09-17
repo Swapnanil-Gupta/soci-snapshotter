@@ -53,19 +53,19 @@ type BenchmarkTestStats struct {
 }
 
 type BenchmarkTestDriver struct {
-	TestName            string             `json:"testName"`
-	NumberOfTests       int                `json:"numberOfTests"`
-	BeforeAllFunctions  []func() error     `json:"-"`
-	BeforeEachFunctions []func() error     `json:"-"`
-	TestFunction        func(*testing.B)   `json:"-"`
-	AfterAllFunctions   []func() error     `json:"-"`
-	AfterEachFunctions  []func() error     `json:"-"`
-	TestsRun            int                `json:"-"`
-	FullRunStats        BenchmarkTestStats `json:"fullRunStats"`
-	PullStats           BenchmarkTestStats `json:"pullStats"`
-	UnpackStats         BenchmarkTestStats `json:"unpackStats"`
-	LazyTaskStats       BenchmarkTestStats `json:"lazyTaskStats"`
-	LocalTaskStats      BenchmarkTestStats `json:"localTaskStats"`
+	TestName            string                `json:"testName"`
+	NumberOfTests       int                   `json:"numberOfTests"`
+	BeforeAllFunctions  []func() error        `json:"-"`
+	BeforeEachFunctions []func() error        `json:"-"`
+	TestFunction        func(*testing.B, int) `json:"-"`
+	AfterAllFunctions   []func() error        `json:"-"`
+	AfterEachFunctions  []func() error        `json:"-"`
+	TestsRun            int                   `json:"-"`
+	FullRunStats        BenchmarkTestStats    `json:"fullRunStats"`
+	PullStats           BenchmarkTestStats    `json:"pullStats"`
+	UnpackStats         BenchmarkTestStats    `json:"unpackStats"`
+	LazyTaskStats       BenchmarkTestStats    `json:"lazyTaskStats"`
+	LocalTaskStats      BenchmarkTestStats    `json:"localTaskStats"`
 }
 
 func (frame *BenchmarkFramework) Run(ctx context.Context) {
@@ -95,7 +95,9 @@ func (frame *BenchmarkFramework) Run(ctx context.Context) {
 
 			log.G(ctx).WithField("test_name", testDriver.TestName).Infof("TestStart for %s_%d", testDriver.TestName, j+1)
 			fmt.Printf("Running test %d of %d\n", j+1, testDriver.NumberOfTests)
-			res := testing.Benchmark(testDriver.TestFunction)
+			res := testing.Benchmark(func(b *testing.B) {
+				testDriver.TestFunction(b, j+1)
+			})
 			testDriver.FullRunStats.BenchmarkTimes = append(testDriver.FullRunStats.BenchmarkTimes, res.T.Seconds())
 			testDriver.PullStats.BenchmarkTimes = append(testDriver.PullStats.BenchmarkTimes, res.Extra["pullDuration"]/1000)
 			testDriver.UnpackStats.BenchmarkTimes = append(testDriver.UnpackStats.BenchmarkTimes, res.Extra["unpackDuration"]/1000)

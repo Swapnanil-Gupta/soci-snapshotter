@@ -53,6 +53,10 @@ type ContainerdProcess struct {
 	Client  *containerd.Client
 }
 
+func (proc *ContainerdProcess) Command() *exec.Cmd {
+	return proc.command
+}
+
 func StartContainerd(
 	containerdAddress string,
 	containerdRoot string,

@@ -24,11 +24,6 @@ import (
 	"github.com/containerd/containerd"
 )
 
-var (
-	runNum  int
-	enabled bool
-)
-
 type TaskNum int
 
 const (
@@ -40,13 +35,10 @@ func Start(
 	ctx context.Context,
 	containerTask containerd.Task,
 	testName string,
+	testNum int,
 	outDir string,
 	taskNum TaskNum,
 ) (func() error, error) {
-	if !enabled {
-		return nil, nil
-	}
-
 	pids, err := getPids(ctx, containerTask)
 	if err != nil {
 		return nil, err
@@ -56,6 +48,7 @@ func Start(
 		pids,
 		outDir,
 		testName,
+		testNum,
 		taskNum,
 	)...)
 	// traceCmd.Stdout = log.G(ctx).Writer()
@@ -103,6 +96,7 @@ func getKernelTraceCmdArgs(
 	pids []uint32,
 	outDir string,
 	testName string,
+	testNum int,
 	taskNum TaskNum,
 ) []string {
 	args := []string{
@@ -111,7 +105,7 @@ func getKernelTraceCmdArgs(
 		"-y",
 		"-T",
 		"-o",
-		getKernelTraceOutPath(outDir, testName, runNum, taskNum),
+		getKernelTraceOutPath(outDir, testName, testNum, taskNum),
 		"-f",
 	}
 	for _, pid := range pids {
@@ -120,28 +114,12 @@ func getKernelTraceCmdArgs(
 	return args
 }
 
-func getKernelTraceOutPath(outDir string, testName string, runNum int, taskNum TaskNum) string {
+func getKernelTraceOutPath(outDir string, testName string, testNum int, taskNum TaskNum) string {
 	return fmt.Sprintf(
 		"%s/%s_run_%d_task_%d.log",
 		outDir,
 		testName,
-		runNum,
+		testNum,
 		taskNum+1,
 	)
-}
-
-func Enable() {
-	enabled = true
-}
-
-func IsEnabled() bool {
-	return enabled
-}
-
-func IncRunNum() {
-	runNum++
-}
-
-func ResetRunNum() {
-	runNum = 0
 }

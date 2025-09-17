@@ -48,6 +48,10 @@ type SociProcess struct {
 	stderr  *os.File
 }
 
+func (proc *SociProcess) Command() *exec.Cmd {
+	return proc.command
+}
+
 func StartSoci(
 	sociBinary string,
 	sociAddress string,

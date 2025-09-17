@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/awslabs/soci-snapshotter/benchmark/framework"
+	"github.com/awslabs/soci-snapshotter/benchmark/framework/cpumemtrace"
 	"github.com/awslabs/soci-snapshotter/benchmark/framework/kerneltrace"
 	"github.com/containerd/containerd"
 	"github.com/containerd/log"
@@ -33,6 +34,7 @@ import (
 var (
 	outputDir              = "./output"
 	kernelTraceOutDir      = outputDir + "/kernel_trace_out"
+	sociCpuMemTraceOutDir  = outputDir + "/cpu_mem_trace_out"
 	containerdAddress      = "/tmp/containerd-grpc/containerd.sock"
 	containerdRoot         = "/tmp/lib/containerd"
 	containerdState        = "/tmp/containerd"
@@ -107,7 +109,12 @@ func SociFastPullFullRun(
 	ctx context.Context,
 	b *testing.B,
 	testName string,
-	imageDescriptor ImageDescriptor) {
+	testNum int,
+	imageDescriptor ImageDescriptor,
+	traceKernelFileAccess bool,
+	traceSociCpuMemUsage bool,
+	cpuMemTraceIntervalMs int,
+) {
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -163,12 +170,13 @@ func SociFastPullFullRun(
 	// kernel trace first task
 	b.StopTimer()
 	var stopFirstKernelTrace func() error
-	if kerneltrace.IsEnabled() {
+	if traceKernelFileAccess {
 		log.G(ctx).Info("starting first kernel trace")
 		stopFirstKernelTrace, err = kerneltrace.Start(
 			ctx,
 			taskDetails.Task(),
 			testName,
+			testNum,
 			kernelTraceOutDir,
 			kerneltrace.FirstTask,
 		)
@@ -178,6 +186,26 @@ func SociFastPullFullRun(
 		log.G(ctx).Info("started first kernel trace")
 	} else {
 		log.G(ctx).Info("kernel trace is disabled")
+	}
+
+	// cpu and memory usage trace first task
+	var stopFirstCpuMemTrace func() error
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting first cpu and memory trace")
+		stopFirstCpuMemTrace, err = cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.FirstTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started first cpu and memory trace")
+	} else {
+		log.G(ctx).Info("cpu and memory trace is disabled")
 	}
 	b.StartTimer()
 
@@ -194,6 +222,25 @@ func SociFastPullFullRun(
 	// We don't want this cleanup time included in the benchmark, though.
 	b.StopTimer()
 	cleanupRun()
+
+	// stop first kernel trace
+	if traceKernelFileAccess && stopFirstKernelTrace != nil {
+		log.G(ctx).Info("stopping first kernel trace")
+		if err := stopFirstKernelTrace(); err != nil {
+			fatalf(b, "failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first kernel trace")
+	}
+
+	// stop first cpu/mem trace
+	if traceSociCpuMemUsage && stopFirstCpuMemTrace != nil {
+		log.G(ctx).Info("stopping first cpu and memory trace")
+		if err := stopFirstCpuMemTrace(); err != nil {
+			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first cpu and memory trace")
+	}
+
 	b.StartTimer()
 	containerSecondRun, cleanupContainerSecondRun, err := sociContainerdProc.CreateSociContainer(ctx, image, imageDescriptor)
 	if err != nil {
@@ -206,22 +253,15 @@ func SociFastPullFullRun(
 	}
 	defer cleanupTaskSecondRun()
 
-	// stop first kernel trace
 	b.StopTimer()
-	if kerneltrace.IsEnabled() && stopFirstKernelTrace != nil {
-		log.G(ctx).Info("stopping first kernel trace")
-		if err := stopFirstKernelTrace(); err != nil {
-			fatalf(b, "failed to stop first kernel trace: %v\n", err)
-		}
-		log.G(ctx).Info("stopped first kernel trace")
-	}
 	// kernel trace second task
-	if kerneltrace.IsEnabled() {
+	if traceKernelFileAccess {
 		log.G(ctx).Info("starting second kernel trace")
 		stopSecondKernelTrace, err := kerneltrace.Start(
 			ctx,
 			taskDetailsSecondRun.Task(),
 			testName,
+			testNum,
 			kernelTraceOutDir,
 			kerneltrace.SecondTask,
 		)
@@ -235,6 +275,30 @@ func SociFastPullFullRun(
 				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
 			log.G(ctx).Info("stopped second kernel trace")
+		}()
+	}
+
+	// cpu mem trace second task
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting second cpu and memory trace")
+		stopSecondCpuMemTrace, err := cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.SecondTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started second cpu and memory trace")
+		defer func() {
+			log.G(ctx).Info("stopping second cpu and memory trace")
+			if err := stopSecondCpuMemTrace(); err != nil {
+				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
+			}
+			log.G(ctx).Info("stopped second cpu and memory trace")
 		}()
 	}
 	b.StartTimer()
@@ -257,7 +321,12 @@ func SociFullRun(
 	ctx context.Context,
 	b *testing.B,
 	testName string,
-	imageDescriptor ImageDescriptor) {
+	testNum int,
+	imageDescriptor ImageDescriptor,
+	traceKernelFileAccess bool,
+	traceSociCpuMemUsage bool,
+	cpuMemTraceIntervalMs int,
+) {
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -302,12 +371,13 @@ func SociFullRun(
 	// kernel trace first task
 	b.StopTimer()
 	var stopFirstKernelTrace func() error
-	if kerneltrace.IsEnabled() {
+	if traceKernelFileAccess {
 		log.G(ctx).Info("starting first kernel trace")
 		stopFirstKernelTrace, err = kerneltrace.Start(
 			ctx,
 			taskDetails.Task(),
 			testName,
+			testNum,
 			kernelTraceOutDir,
 			kerneltrace.FirstTask,
 		)
@@ -317,6 +387,26 @@ func SociFullRun(
 		log.G(ctx).Info("started first kernel trace")
 	} else {
 		log.G(ctx).Info("kernel trace is disabled")
+	}
+
+	// cpu and memory usage trace first task
+	var stopFirstCpuMemTrace func() error
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting first cpu and memory trace")
+		stopFirstCpuMemTrace, err = cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.FirstTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started first cpu and memory trace")
+	} else {
+		log.G(ctx).Info("cpu and memory trace is disabled")
 	}
 	b.StartTimer()
 
@@ -333,6 +423,25 @@ func SociFullRun(
 	// We don't want this cleanup time included in the benchmark, though.
 	b.StopTimer()
 	cleanupRun()
+
+	// stop first kernel trace
+	if traceKernelFileAccess && stopFirstKernelTrace != nil {
+		log.G(ctx).Info("stopping first kernel trace")
+		if err := stopFirstKernelTrace(); err != nil {
+			fatalf(b, "failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first kernel trace")
+	}
+
+	// stop first cpu/mem trace
+	if traceSociCpuMemUsage && stopFirstCpuMemTrace != nil {
+		log.G(ctx).Info("stopping first cpu and memory trace")
+		if err := stopFirstCpuMemTrace(); err != nil {
+			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first cpu and memory trace")
+	}
+
 	b.StartTimer()
 	containerSecondRun, cleanupContainerSecondRun, err := sociContainerdProc.CreateSociContainer(ctx, image, imageDescriptor)
 	if err != nil {
@@ -345,22 +454,15 @@ func SociFullRun(
 	}
 	defer cleanupTaskSecondRun()
 
-	// stop first kernel trace
 	b.StopTimer()
-	if kerneltrace.IsEnabled() && stopFirstKernelTrace != nil {
-		log.G(ctx).Info("stopping first kernel trace")
-		if err := stopFirstKernelTrace(); err != nil {
-			fatalf(b, "failed to stop first kernel trace: %v\n", err)
-		}
-		log.G(ctx).Info("stopped first kernel trace")
-	}
 	// kernel trace second task
-	if kerneltrace.IsEnabled() {
+	if traceKernelFileAccess {
 		log.G(ctx).Info("starting second kernel trace")
 		stopSecondKernelTrace, err := kerneltrace.Start(
 			ctx,
 			taskDetailsSecondRun.Task(),
 			testName,
+			testNum,
 			kernelTraceOutDir,
 			kerneltrace.SecondTask,
 		)
@@ -374,6 +476,30 @@ func SociFullRun(
 				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
 			log.G(ctx).Info("stopped second kernel trace")
+		}()
+	}
+
+	// cpu mem trace second task
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting second cpu and memory trace")
+		stopSecondCpuMemTrace, err := cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.SecondTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started second cpu and memory trace")
+		defer func() {
+			log.G(ctx).Info("stopping second cpu and memory trace")
+			if err := stopSecondCpuMemTrace(); err != nil {
+				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
+			}
+			log.G(ctx).Info("stopped second cpu and memory trace")
 		}()
 	}
 	b.StartTimer()
@@ -396,7 +522,10 @@ func OverlayFSFullRun(
 	ctx context.Context,
 	b *testing.B,
 	testName string,
-	imageDescriptor ImageDescriptor) {
+	testNum int,
+	imageDescriptor ImageDescriptor,
+	traceKernelFileAccess bool,
+) {
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("uuid", testUUID))
@@ -443,12 +572,13 @@ func OverlayFSFullRun(
 	// kernel trace first task
 	b.StopTimer()
 	var stopFirstKernelTrace func() error
-	if kerneltrace.IsEnabled() {
+	if traceKernelFileAccess {
 		log.G(ctx).Info("starting first kernel trace")
 		stopFirstKernelTrace, err = kerneltrace.Start(
 			ctx,
 			taskDetails.Task(),
 			testName,
+			testNum,
 			kernelTraceOutDir,
 			kerneltrace.FirstTask,
 		)
@@ -474,6 +604,16 @@ func OverlayFSFullRun(
 	// We don't want this cleanup time included in the benchmark, though.
 	b.StopTimer()
 	cleanupRun()
+
+	// stop first kernel trace
+	if traceKernelFileAccess && stopFirstKernelTrace != nil {
+		log.G(ctx).Info("stopping first kernel trace")
+		if err := stopFirstKernelTrace(); err != nil {
+			fatalf(b, "failed to stop first kernel trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first kernel trace")
+	}
+
 	b.StartTimer()
 	containerSecondRun, cleanupContainerSecondRun, err := containerdProcess.CreateContainer(ctx, imageDescriptor.ContainerOpts(image)...)
 	if err != nil {
@@ -486,22 +626,15 @@ func OverlayFSFullRun(
 	}
 	defer cleanupTaskSecondRun()
 
-	// stop first kernel trace
 	b.StopTimer()
-	if kerneltrace.IsEnabled() && stopFirstKernelTrace != nil {
-		log.G(ctx).Info("stopping first kernel trace")
-		if err := stopFirstKernelTrace(); err != nil {
-			fatalf(b, "failed to stop first kernel trace: %v\n", err)
-		}
-		log.G(ctx).Info("stopped first kernel trace")
-	}
 	// kernel trace second task
-	if kerneltrace.IsEnabled() {
+	if traceKernelFileAccess {
 		log.G(ctx).Info("starting second kernel trace")
 		stopSecondKernelTrace, err := kerneltrace.Start(
 			ctx,
 			taskDetailsSecondRun.Task(),
 			testName,
+			testNum,
 			kernelTraceOutDir,
 			kerneltrace.SecondTask,
 		)
