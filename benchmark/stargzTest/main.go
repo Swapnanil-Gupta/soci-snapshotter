@@ -64,7 +64,7 @@ func main() {
 		drivers = append(drivers, framework.BenchmarkTestDriver{
 			TestName:      "StargzFullRun" + shortName,
 			NumberOfTests: numberOfTests,
-			TestFunction: func(b *testing.B) {
+			TestFunction: func(b *testing.B, _ int) {
 				benchmark.StargzFullRun(ctx, b, image, stargzBinary)
 			},
 		})
