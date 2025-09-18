@@ -129,6 +129,27 @@ func SociFastPullFullRun(
 	}
 	defer sociProcess.StopProcess()
 	sociContainerdProc := SociContainerdProcess{containerdProcess}
+
+	// cpu and memory usage trace first task
+	var stopFirstCpuMemTrace func() error
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting first cpu and memory trace")
+		stopFirstCpuMemTrace, err = cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.FirstTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started first cpu and memory trace")
+	} else {
+		log.G(ctx).Info("cpu and memory trace is disabled")
+	}
+
 	b.ResetTimer()
 	pullStart := time.Now()
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Start").Infof("Start Test")
@@ -187,26 +208,6 @@ func SociFastPullFullRun(
 	} else {
 		log.G(ctx).Info("kernel trace is disabled")
 	}
-
-	// cpu and memory usage trace first task
-	var stopFirstCpuMemTrace func() error
-	if traceSociCpuMemUsage {
-		log.G(ctx).Info("starting first cpu and memory trace")
-		stopFirstCpuMemTrace, err = cpumemtrace.Start(
-			sociProcess.Command(),
-			testName,
-			testNum,
-			cpumemtrace.FirstTask,
-			sociCpuMemTraceOutDir,
-			cpuMemTraceIntervalMs,
-		)
-		if err != nil {
-			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
-		}
-		log.G(ctx).Info("started first cpu and memory trace")
-	} else {
-		log.G(ctx).Info("cpu and memory trace is disabled")
-	}
 	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
@@ -239,6 +240,30 @@ func SociFastPullFullRun(
 			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
 		}
 		log.G(ctx).Info("stopped first cpu and memory trace")
+	}
+
+	// cpu mem trace second task
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting second cpu and memory trace")
+		stopSecondCpuMemTrace, err := cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.SecondTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started second cpu and memory trace")
+		defer func() {
+			log.G(ctx).Info("stopping second cpu and memory trace")
+			if err := stopSecondCpuMemTrace(); err != nil {
+				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
+			}
+			log.G(ctx).Info("stopped second cpu and memory trace")
+		}()
 	}
 
 	b.StartTimer()
@@ -275,30 +300,6 @@ func SociFastPullFullRun(
 				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
 			log.G(ctx).Info("stopped second kernel trace")
-		}()
-	}
-
-	// cpu mem trace second task
-	if traceSociCpuMemUsage {
-		log.G(ctx).Info("starting second cpu and memory trace")
-		stopSecondCpuMemTrace, err := cpumemtrace.Start(
-			sociProcess.Command(),
-			testName,
-			testNum,
-			cpumemtrace.SecondTask,
-			sociCpuMemTraceOutDir,
-			cpuMemTraceIntervalMs,
-		)
-		if err != nil {
-			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
-		}
-		log.G(ctx).Info("started second cpu and memory trace")
-		defer func() {
-			log.G(ctx).Info("stopping second cpu and memory trace")
-			if err := stopSecondCpuMemTrace(); err != nil {
-				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
-			}
-			log.G(ctx).Info("stopped second cpu and memory trace")
 		}()
 	}
 	b.StartTimer()
@@ -341,6 +342,27 @@ func SociFullRun(
 	}
 	defer sociProcess.StopProcess()
 	sociContainerdProc := SociContainerdProcess{containerdProcess}
+
+	// cpu and memory usage trace first task
+	var stopFirstCpuMemTrace func() error
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting first cpu and memory trace")
+		stopFirstCpuMemTrace, err = cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.FirstTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started first cpu and memory trace")
+	} else {
+		log.G(ctx).Info("cpu and memory trace is disabled")
+	}
+
 	b.ResetTimer()
 	pullStart := time.Now()
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Start").Infof("Start Test")
@@ -388,26 +410,6 @@ func SociFullRun(
 	} else {
 		log.G(ctx).Info("kernel trace is disabled")
 	}
-
-	// cpu and memory usage trace first task
-	var stopFirstCpuMemTrace func() error
-	if traceSociCpuMemUsage {
-		log.G(ctx).Info("starting first cpu and memory trace")
-		stopFirstCpuMemTrace, err = cpumemtrace.Start(
-			sociProcess.Command(),
-			testName,
-			testNum,
-			cpumemtrace.FirstTask,
-			sociCpuMemTraceOutDir,
-			cpuMemTraceIntervalMs,
-		)
-		if err != nil {
-			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
-		}
-		log.G(ctx).Info("started first cpu and memory trace")
-	} else {
-		log.G(ctx).Info("cpu and memory trace is disabled")
-	}
 	b.StartTimer()
 
 	log.G(ctx).WithField("benchmark", "RunTask").WithField("event", "Start").Infof("Start Run Task")
@@ -440,6 +442,30 @@ func SociFullRun(
 			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
 		}
 		log.G(ctx).Info("stopped first cpu and memory trace")
+	}
+
+	// cpu mem trace second task
+	if traceSociCpuMemUsage {
+		log.G(ctx).Info("starting second cpu and memory trace")
+		stopSecondCpuMemTrace, err := cpumemtrace.Start(
+			sociProcess.Command(),
+			testName,
+			testNum,
+			cpumemtrace.SecondTask,
+			sociCpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started second cpu and memory trace")
+		defer func() {
+			log.G(ctx).Info("stopping second cpu and memory trace")
+			if err := stopSecondCpuMemTrace(); err != nil {
+				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
+			}
+			log.G(ctx).Info("stopped second cpu and memory trace")
+		}()
 	}
 
 	b.StartTimer()
@@ -476,30 +502,6 @@ func SociFullRun(
 				fatalf(b, "failed to stop second kernel trace: %v\n", err)
 			}
 			log.G(ctx).Info("stopped second kernel trace")
-		}()
-	}
-
-	// cpu mem trace second task
-	if traceSociCpuMemUsage {
-		log.G(ctx).Info("starting second cpu and memory trace")
-		stopSecondCpuMemTrace, err := cpumemtrace.Start(
-			sociProcess.Command(),
-			testName,
-			testNum,
-			cpumemtrace.SecondTask,
-			sociCpuMemTraceOutDir,
-			cpuMemTraceIntervalMs,
-		)
-		if err != nil {
-			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
-		}
-		log.G(ctx).Info("started second cpu and memory trace")
-		defer func() {
-			log.G(ctx).Info("stopping second cpu and memory trace")
-			if err := stopSecondCpuMemTrace(); err != nil {
-				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
-			}
-			log.G(ctx).Info("stopped second cpu and memory trace")
 		}()
 	}
 	b.StartTimer()
