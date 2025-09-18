@@ -52,7 +52,6 @@ func DropCaches() error {
 }
 
 func Start(
-	sociProcessCmd *exec.Cmd,
 	testName string,
 	testNum int,
 	taskNum TaskNum,
@@ -60,7 +59,6 @@ func Start(
 	intervalMs int,
 ) (func() error, error) {
 	interval := time.Duration(intervalMs) * time.Millisecond
-	// sociPid := sociProcessCmd.Process.Pid
 
 	outFile, err := os.Create(getCpuMemTraceOutPath(outDir, testName, testNum, taskNum))
 	if err != nil {

@@ -38,10 +38,11 @@ type run struct {
 }
 
 type task struct {
-	MaxCpuUsage float64 `json:"maxCpuUsage"`
-	MaxRssUsage float64 `json:"maxRssUsage"`
+	MaxCpuUsagePercent float64 `json:"maxCpuUsagePercent"`
+	MaxMemUsage        float64 `json:"maxMemUsage"`
 }
 
+var cpuMemParseRegex = regexp.MustCompile(`^(\d+\.\d+),(\d+\.\d+)$`)
 var prevIdleTime = -1.0
 var prevTotalTime = -1.0
 
@@ -58,10 +59,10 @@ func Parse(
 	runs := make([]*run, numTests)
 	for i := 1; i <= numTests; i++ {
 		maxCpuUsages := make([]float64, 2)
-		maxRssUsages := make([]float64, 2)
+		maxMemUsages := make([]float64, 2)
 		for j := 0; j <= 1; j++ {
 			maxCpuUsage := -1.0
-			maxRssUsage := -1.0
+			maxMemUsage := -1.0
 
 			file, err := os.Open(getCpuMemTraceOutPath(outDir, testName, i, IntToTaskNum(j)))
 			if err != nil {
@@ -71,23 +72,23 @@ func Parse(
 			scanner := bufio.NewScanner(file)
 			for scanner.Scan() {
 				line := scanner.Text()
-				cpuUsage, rssUsage := parseLine(line)
+				cpuUsage, memUsage := parseLine(line)
 				maxCpuUsage = max(maxCpuUsage, cpuUsage)
-				maxRssUsage = max(maxRssUsage, rssUsage)
+				maxMemUsage = max(maxMemUsage, memUsage)
 			}
 
 			maxCpuUsages[j] = maxCpuUsage
-			maxRssUsages[j] = maxRssUsage
+			maxMemUsages[j] = maxMemUsage
 		}
 
 		runs[i-1] = &run{
 			Task1: &task{
-				MaxCpuUsage: maxCpuUsages[0],
-				MaxRssUsage: maxRssUsages[0],
+				MaxCpuUsagePercent: maxCpuUsages[0],
+				MaxMemUsage:        maxMemUsages[0],
 			},
 			Task2: &task{
-				MaxCpuUsage: maxCpuUsages[1],
-				MaxRssUsage: maxRssUsages[1],
+				MaxCpuUsagePercent: maxCpuUsages[1],
+				MaxMemUsage:        maxMemUsages[1],
 			},
 		}
 	}
@@ -109,17 +110,16 @@ func Parse(
 }
 
 func parseLine(line string) (float64, float64) {
-	regex := regexp.MustCompile(`^(\d+\.\d+),(\d+\.\d+)$`)
-	if matches := regex.FindStringSubmatch(line); len(matches) == 3 {
+	if matches := cpuMemParseRegex.FindStringSubmatch(line); len(matches) == 3 {
 		cpuUsage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
 			return -1, -1
 		}
-		rssUsage, err := strconv.ParseFloat(matches[2], 64)
+		memUsage, err := strconv.ParseFloat(matches[2], 64)
 		if err != nil {
 			return -1, -1
 		}
-		return cpuUsage, rssUsage
+		return cpuUsage, memUsage
 	}
 	return -1, -1
 }

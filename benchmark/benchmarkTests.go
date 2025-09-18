@@ -135,7 +135,6 @@ func SociFastPullFullRun(
 	if traceSociCpuMemUsage {
 		log.G(ctx).Info("starting first cpu and memory trace")
 		stopFirstCpuMemTrace, err = cpumemtrace.Start(
-			sociProcess.Command(),
 			testName,
 			testNum,
 			cpumemtrace.FirstTask,
@@ -246,7 +245,6 @@ func SociFastPullFullRun(
 	if traceSociCpuMemUsage {
 		log.G(ctx).Info("starting second cpu and memory trace")
 		stopSecondCpuMemTrace, err := cpumemtrace.Start(
-			sociProcess.Command(),
 			testName,
 			testNum,
 			cpumemtrace.SecondTask,
@@ -348,7 +346,6 @@ func SociFullRun(
 	if traceSociCpuMemUsage {
 		log.G(ctx).Info("starting first cpu and memory trace")
 		stopFirstCpuMemTrace, err = cpumemtrace.Start(
-			sociProcess.Command(),
 			testName,
 			testNum,
 			cpumemtrace.FirstTask,
@@ -448,7 +445,6 @@ func SociFullRun(
 	if traceSociCpuMemUsage {
 		log.G(ctx).Info("starting second cpu and memory trace")
 		stopSecondCpuMemTrace, err := cpumemtrace.Start(
-			sociProcess.Command(),
 			testName,
 			testNum,
 			cpumemtrace.SecondTask,
