@@ -23,6 +23,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 type test struct {
@@ -39,6 +40,14 @@ type run struct {
 type task struct {
 	MaxCpuUsage float64 `json:"maxCpuUsage"`
 	MaxRssUsage float64 `json:"maxRssUsage"`
+}
+
+var prevIdleTime = -1.0
+var prevTotalTime = -1.0
+
+func resetTimes() {
+	prevIdleTime = -1.0
+	prevTotalTime = -1.0
 }
 
 func Parse(
@@ -100,7 +109,7 @@ func Parse(
 }
 
 func parseLine(line string) (float64, float64) {
-	regex := regexp.MustCompile(`(?<cpu>\d+(?:\.\d+)?)\s+(?<rss>\d+)`)
+	regex := regexp.MustCompile(`^(\d+\.\d+),(\d+\.\d+)$`)
 	if matches := regex.FindStringSubmatch(line); len(matches) == 3 {
 		cpuUsage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
@@ -113,4 +122,76 @@ func parseLine(line string) (float64, float64) {
 		return cpuUsage, rssUsage
 	}
 	return -1, -1
+}
+
+func parseCpuPercentage(cpuOutput string) float64 {
+	/*
+		sample output:
+		cpu  2866036 532648 3395867 486174341 194979 0 144080 22252 0 0
+		cpu0 346315 237981 667328 60378225 22047 0 53592 1031 0 0
+		cpu1 362740 43581 392929 60812672 16541 0 44022 10275 0 0
+		cpu2 359290 44580 388211 60840113 15966 0 17803 1550 0 0
+		cpu3 357928 41109 388545 60844853 15513 0 8820 926 0 0
+		cpu4 362436 41567 386090 60842457 14215 0 6996 1123 0 0
+		cpu5 358442 37654 390042 60812025 45472 0 5285 4991 0 0
+		cpu6 359017 45822 390838 60837657 16752 0 3979 1359 0 0
+		cpu7 359864 40350 391880 60806335 48469 0 3580 993 0 0
+		intr 1435070955 29 10 0 0 747 0 0 0 0 0 0 0 88 0 0 0 0 0 0 0 0 0 0 0 15 4556147 3159590 639152 2736120 2127981 2041854 2410196 2928063 2371474 2458041 2334282 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+		ctxt 2574910619
+		btime 1757611684
+		processes 8163852
+		procs_running 3
+		procs_blocked 0
+		softirq 239359185 0 22870145 123947 23006899 14 0 632089 97384795 174 95341122
+	*/
+
+	if cpuOutput == "" {
+		return -1.0
+	}
+	lines := strings.Split(cpuOutput, "\n")
+	if len(lines) == 0 {
+		return -1.0
+	}
+
+	firstLine := lines[0][5:]
+	fields := strings.Fields(firstLine)
+	idleTime, _ := strconv.ParseFloat(fields[3], 64)
+	totalTime := 0.0
+	for _, field := range fields {
+		parsedTime, _ := strconv.ParseFloat(field, 64)
+		totalTime += parsedTime
+	}
+
+	cpuPercent := -1.0
+	if prevIdleTime != -1.0 && prevTotalTime != -1.0 {
+		deltaIdleTime := idleTime - prevIdleTime
+		deltaTotalTime := totalTime - prevTotalTime
+		cpuPercent = (1.0 - (float64(deltaIdleTime) / float64(deltaTotalTime))) * 100.0
+	}
+	prevIdleTime = idleTime
+	prevTotalTime = totalTime
+	return cpuPercent
+}
+
+func parseMemUsage(memOutput string) float64 {
+	/*
+		sample output:
+		              total        used        free      shared  buff/cache   available
+		Mem:          15628        3451       11376           1         801       11896
+		Swap:             0           0           0
+	*/
+
+	if memOutput == "" {
+		return -1.0
+	}
+
+	lines := strings.Split(memOutput, "\n")
+	if len(lines) == 0 {
+		return -1.0
+	}
+
+	secondLine := lines[1]
+	fields := strings.Fields(secondLine)
+	memUsage, _ := strconv.ParseFloat(fields[2], 64)
+	return memUsage
 }

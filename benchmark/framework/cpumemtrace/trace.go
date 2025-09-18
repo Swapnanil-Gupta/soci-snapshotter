@@ -43,6 +43,14 @@ func IntToTaskNum(i int) TaskNum {
 	}
 }
 
+func DropCaches() error {
+	err := os.WriteFile("/proc/sys/vm/drop_caches", []byte("3"), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to drop caches: %w", err)
+	}
+	return nil
+}
+
 func Start(
 	sociProcessCmd *exec.Cmd,
 	testName string,
@@ -52,7 +60,7 @@ func Start(
 	intervalMs int,
 ) (func() error, error) {
 	interval := time.Duration(intervalMs) * time.Millisecond
-	sociPid := sociProcessCmd.Process.Pid
+	// sociPid := sociProcessCmd.Process.Pid
 
 	outFile, err := os.Create(getCpuMemTraceOutPath(outDir, testName, testNum, taskNum))
 	if err != nil {
@@ -67,9 +75,15 @@ func Start(
 			case <-ctx.Done():
 				return
 			default:
-				cmd := exec.Command("ps", "-p", fmt.Sprintf("%d", sociPid), "-o", "%cpu,rss")
-				output, _ := cmd.Output()
-				writer.WriteString(string(output))
+				cpuCmd := exec.Command("cat", "/proc/stat")
+				cpuOutput, _ := cpuCmd.Output()
+				cpuPercent := parseCpuPercentage(string(cpuOutput))
+
+				memCmd := exec.Command("free", "-m")
+				memOutput, _ := memCmd.Output()
+				memUsage := parseMemUsage(string(memOutput))
+
+				writer.WriteString(fmt.Sprintf("%f,%f\n", cpuPercent, memUsage))
 				time.Sleep(interval)
 			}
 		}
@@ -87,6 +101,7 @@ func Start(
 			err = fmt.Errorf("failed to close cpu/mem trace file: %w", err)
 			return err
 		}
+		resetTimes()
 		return nil
 	}, nil
 }

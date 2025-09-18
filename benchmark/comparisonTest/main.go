@@ -159,6 +159,11 @@ func main() {
 			})
 		}
 		if traceSociCpuMemUsage {
+			sociTestDriver.BeforeEachFunctions = append(sociTestDriver.BeforeEachFunctions, func() error {
+				return cpumemtrace.DropCaches()
+			})
+		}
+		if traceSociCpuMemUsage {
 			sociTestDriver.AfterAllFunctions = append(sociTestDriver.AfterAllFunctions, func() error {
 				return cpumemtrace.Parse(sociCpuMemTraceOutDir, sociTestName, numberOfTests)
 			})
@@ -185,6 +190,11 @@ func main() {
 		if traceKernelFileAccess {
 			sociFastPullTestDriver.AfterAllFunctions = append(sociFastPullTestDriver.AfterAllFunctions, func() error {
 				return kerneltrace.Parse(kernelTraceScriptOutDir, sociFastPullTestName, numberOfTests)
+			})
+		}
+		if traceSociCpuMemUsage {
+			sociFastPullTestDriver.BeforeEachFunctions = append(sociFastPullTestDriver.BeforeEachFunctions, func() error {
+				return cpumemtrace.DropCaches()
 			})
 		}
 		if traceSociCpuMemUsage {

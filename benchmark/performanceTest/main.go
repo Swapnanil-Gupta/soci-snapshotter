@@ -159,6 +159,12 @@ func main() {
 		}
 
 		if traceSociCpuMemUsage {
+			driver.BeforeEachFunctions = append(driver.BeforeEachFunctions, func() error {
+				return cpumemtrace.DropCaches()
+			})
+		}
+
+		if traceSociCpuMemUsage {
 			driver.AfterAllFunctions = append(driver.AfterAllFunctions, func() error {
 				return cpumemtrace.Parse(sociCpuMemTraceOutDir, testName, numberOfTests)
 			})
