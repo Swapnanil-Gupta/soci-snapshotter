@@ -41,10 +41,10 @@ func main() {
 		showCom                 bool
 		parseFileAccessPatterns bool
 		traceKernelFileAccess   bool
-		traceSociCpuMemUsage    bool
+		traceCpuMemUsage        bool
 		cpuMemTraceIntervalMs   int
 		kernelTraceScriptOutDir string
-		sociCpuMemTraceOutDir   string
+		cpuMemTraceOutDir       string
 		commit                  string
 		imageList               []benchmark.ImageDescriptor
 		err                     error
@@ -53,7 +53,7 @@ func main() {
 	flag.BoolVar(&parseFileAccessPatterns, "parse-file-access", false, "Parse fuse file access patterns.")
 	flag.BoolVar(&showCom, "show-commit", false, "tag the commit hash to the benchmark results")
 	flag.BoolVar(&traceKernelFileAccess, "trace-kernel-file-access", false, "Trace fuse file access patterns.")
-	flag.BoolVar(&traceSociCpuMemUsage, "trace-soci-cpu-mem-usage", false, "Trace CPU & memory usage of SOCI.")
+	flag.BoolVar(&traceCpuMemUsage, "trace-cpu-mem-usage", false, "Trace CPU & memory usage.")
 	flag.IntVar(&numberOfTests, "count", 5, "Describes the number of runs a benchmarker should run. Default: 5")
 	flag.IntVar(&cpuMemTraceIntervalMs, "cpu-mem-trace-interval-ms", 1000, "Describes the interval of cpu/mem tracing in milliseconds. Default: 1000ms = 1s")
 	flag.StringVar(&jsonFile, "f", "default", "Path to a json file describing image details in this order ['Name','Image ref', 'Ready line', 'manifest ref']")
@@ -90,13 +90,13 @@ func main() {
 		}
 	}
 
-	if traceSociCpuMemUsage {
-		sociCpuMemTraceOutDir = outputDir + "/cpu_mem_trace_out"
-		err := os.RemoveAll(sociCpuMemTraceOutDir)
+	if traceCpuMemUsage {
+		cpuMemTraceOutDir = outputDir + "/cpu_mem_trace_out"
+		err := os.RemoveAll(cpuMemTraceOutDir)
 		if err != nil {
 			panic(err)
 		}
-		err = os.MkdirAll(sociCpuMemTraceOutDir, 0755)
+		err = os.MkdirAll(cpuMemTraceOutDir, 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -140,7 +140,7 @@ func main() {
 					testNum,
 					image,
 					traceKernelFileAccess,
-					traceSociCpuMemUsage,
+					traceCpuMemUsage,
 					cpuMemTraceIntervalMs,
 				)
 			},
@@ -158,15 +158,15 @@ func main() {
 			})
 		}
 
-		if traceSociCpuMemUsage {
+		if traceCpuMemUsage {
 			driver.BeforeEachFunctions = append(driver.BeforeEachFunctions, func() error {
 				return cpumemtrace.DropCaches()
 			})
 		}
 
-		if traceSociCpuMemUsage {
+		if traceCpuMemUsage {
 			driver.AfterAllFunctions = append(driver.AfterAllFunctions, func() error {
-				return cpumemtrace.Parse(sociCpuMemTraceOutDir, testName, numberOfTests)
+				return cpumemtrace.Parse(cpuMemTraceOutDir, testName, numberOfTests)
 			})
 		}
 

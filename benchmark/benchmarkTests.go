@@ -34,7 +34,7 @@ import (
 var (
 	outputDir              = "./output"
 	kernelTraceOutDir      = outputDir + "/kernel_trace_out"
-	sociCpuMemTraceOutDir  = outputDir + "/cpu_mem_trace_out"
+	cpuMemTraceOutDir      = outputDir + "/cpu_mem_trace_out"
 	containerdAddress      = "/tmp/containerd-grpc/containerd.sock"
 	containerdRoot         = "/tmp/lib/containerd"
 	containerdState        = "/tmp/containerd"
@@ -112,7 +112,7 @@ func SociFastPullFullRun(
 	testNum int,
 	imageDescriptor ImageDescriptor,
 	traceKernelFileAccess bool,
-	traceSociCpuMemUsage bool,
+	traceCpuMemUsage bool,
 	cpuMemTraceIntervalMs int,
 ) {
 	testUUID := uuid.New().String()
@@ -132,13 +132,13 @@ func SociFastPullFullRun(
 
 	// cpu and memory usage trace first task
 	var stopFirstCpuMemTrace func() error
-	if traceSociCpuMemUsage {
+	if traceCpuMemUsage {
 		log.G(ctx).Info("starting first cpu and memory trace")
 		stopFirstCpuMemTrace, err = cpumemtrace.Start(
 			testName,
 			testNum,
 			cpumemtrace.FirstTask,
-			sociCpuMemTraceOutDir,
+			cpuMemTraceOutDir,
 			cpuMemTraceIntervalMs,
 		)
 		if err != nil {
@@ -233,7 +233,7 @@ func SociFastPullFullRun(
 	}
 
 	// stop first cpu/mem trace
-	if traceSociCpuMemUsage && stopFirstCpuMemTrace != nil {
+	if traceCpuMemUsage && stopFirstCpuMemTrace != nil {
 		log.G(ctx).Info("stopping first cpu and memory trace")
 		if err := stopFirstCpuMemTrace(); err != nil {
 			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
@@ -242,13 +242,13 @@ func SociFastPullFullRun(
 	}
 
 	// cpu mem trace second task
-	if traceSociCpuMemUsage {
+	if traceCpuMemUsage {
 		log.G(ctx).Info("starting second cpu and memory trace")
 		stopSecondCpuMemTrace, err := cpumemtrace.Start(
 			testName,
 			testNum,
 			cpumemtrace.SecondTask,
-			sociCpuMemTraceOutDir,
+			cpuMemTraceOutDir,
 			cpuMemTraceIntervalMs,
 		)
 		if err != nil {
@@ -323,7 +323,7 @@ func SociFullRun(
 	testNum int,
 	imageDescriptor ImageDescriptor,
 	traceKernelFileAccess bool,
-	traceSociCpuMemUsage bool,
+	traceCpuMemUsage bool,
 	cpuMemTraceIntervalMs int,
 ) {
 	testUUID := uuid.New().String()
@@ -343,13 +343,13 @@ func SociFullRun(
 
 	// cpu and memory usage trace first task
 	var stopFirstCpuMemTrace func() error
-	if traceSociCpuMemUsage {
+	if traceCpuMemUsage {
 		log.G(ctx).Info("starting first cpu and memory trace")
 		stopFirstCpuMemTrace, err = cpumemtrace.Start(
 			testName,
 			testNum,
 			cpumemtrace.FirstTask,
-			sociCpuMemTraceOutDir,
+			cpuMemTraceOutDir,
 			cpuMemTraceIntervalMs,
 		)
 		if err != nil {
@@ -433,7 +433,7 @@ func SociFullRun(
 	}
 
 	// stop first cpu/mem trace
-	if traceSociCpuMemUsage && stopFirstCpuMemTrace != nil {
+	if traceCpuMemUsage && stopFirstCpuMemTrace != nil {
 		log.G(ctx).Info("stopping first cpu and memory trace")
 		if err := stopFirstCpuMemTrace(); err != nil {
 			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
@@ -442,13 +442,13 @@ func SociFullRun(
 	}
 
 	// cpu mem trace second task
-	if traceSociCpuMemUsage {
+	if traceCpuMemUsage {
 		log.G(ctx).Info("starting second cpu and memory trace")
 		stopSecondCpuMemTrace, err := cpumemtrace.Start(
 			testName,
 			testNum,
 			cpumemtrace.SecondTask,
-			sociCpuMemTraceOutDir,
+			cpuMemTraceOutDir,
 			cpuMemTraceIntervalMs,
 		)
 		if err != nil {
@@ -523,6 +523,8 @@ func OverlayFSFullRun(
 	testNum int,
 	imageDescriptor ImageDescriptor,
 	traceKernelFileAccess bool,
+	traceCpuMemUsage bool,
+	cpuMemTraceIntervalMs int,
 ) {
 	testUUID := uuid.New().String()
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("test_name", testName))
@@ -532,6 +534,26 @@ func OverlayFSFullRun(
 		fatalf(b, "Failed to create containerd proc: %v\n", err)
 	}
 	defer containerdProcess.StopProcess()
+
+	// cpu and memory usage trace first task
+	var stopFirstCpuMemTrace func() error
+	if traceCpuMemUsage {
+		log.G(ctx).Info("starting first cpu and memory trace")
+		stopFirstCpuMemTrace, err = cpumemtrace.Start(
+			testName,
+			testNum,
+			cpumemtrace.FirstTask,
+			cpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started first cpu and memory trace")
+	} else {
+		log.G(ctx).Info("cpu and memory trace is disabled")
+	}
+
 	b.ResetTimer()
 	log.G(ctx).WithField("benchmark", "Test").WithField("event", "Start").Infof("Start Test")
 	log.G(ctx).WithField("benchmark", "Pull").WithField("event", "Start").Infof("Start Pull Image")
@@ -610,6 +632,38 @@ func OverlayFSFullRun(
 			fatalf(b, "failed to stop first kernel trace: %v\n", err)
 		}
 		log.G(ctx).Info("stopped first kernel trace")
+	}
+
+	// stop first cpu/mem trace
+	if traceCpuMemUsage && stopFirstCpuMemTrace != nil {
+		log.G(ctx).Info("stopping first cpu and memory trace")
+		if err := stopFirstCpuMemTrace(); err != nil {
+			fatalf(b, "failed to stop first cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("stopped first cpu and memory trace")
+	}
+
+	// cpu mem trace second task
+	if traceCpuMemUsage {
+		log.G(ctx).Info("starting second cpu and memory trace")
+		stopSecondCpuMemTrace, err := cpumemtrace.Start(
+			testName,
+			testNum,
+			cpumemtrace.SecondTask,
+			cpuMemTraceOutDir,
+			cpuMemTraceIntervalMs,
+		)
+		if err != nil {
+			fatalf(b, "failed to start second cpu and memory trace: %v\n", err)
+		}
+		log.G(ctx).Info("started second cpu and memory trace")
+		defer func() {
+			log.G(ctx).Info("stopping second cpu and memory trace")
+			if err := stopSecondCpuMemTrace(); err != nil {
+				fatalf(b, "failed to stop second cpu and memory trace: %v\n", err)
+			}
+			log.G(ctx).Info("stopped second cpu and memory trace")
+		}()
 	}
 
 	b.StartTimer()

@@ -40,9 +40,10 @@ type run struct {
 type task struct {
 	MaxCpuUsagePercent float64 `json:"maxCpuUsagePercent"`
 	MaxMemUsage        float64 `json:"maxMemUsage"`
+	MaxMemUsagePercent float64 `json:"maxMemUsagePercent"`
 }
 
-var cpuMemParseRegex = regexp.MustCompile(`^(\d+\.\d+),(\d+\.\d+)$`)
+var cpuMemParseRegex = regexp.MustCompile(`^(\d+\.\d+),(\d+\.\d+),(\d+\.\d+)$`)
 var prevIdleTime = -1.0
 var prevTotalTime = -1.0
 
@@ -58,11 +59,13 @@ func Parse(
 ) error {
 	runs := make([]*run, numTests)
 	for i := 1; i <= numTests; i++ {
-		maxCpuUsages := make([]float64, 2)
+		maxCpuUsagePercents := make([]float64, 2)
 		maxMemUsages := make([]float64, 2)
+		maxMemUsagePercents := make([]float64, 2)
 		for j := 0; j <= 1; j++ {
-			maxCpuUsage := -1.0
+			maxCpuUsagePercent := -1.0
 			maxMemUsage := -1.0
+			maxMemUsagePercent := -1.0
 
 			file, err := os.Open(getCpuMemTraceOutPath(outDir, testName, i, IntToTaskNum(j)))
 			if err != nil {
@@ -72,23 +75,27 @@ func Parse(
 			scanner := bufio.NewScanner(file)
 			for scanner.Scan() {
 				line := scanner.Text()
-				cpuUsage, memUsage := parseLine(line)
-				maxCpuUsage = max(maxCpuUsage, cpuUsage)
+				cpuUsagePercent, memUsage, memUsagePercent := parseLine(line)
+				maxCpuUsagePercent = max(maxCpuUsagePercent, cpuUsagePercent)
 				maxMemUsage = max(maxMemUsage, memUsage)
+				maxMemUsagePercent = max(maxMemUsagePercent, memUsagePercent)
 			}
 
-			maxCpuUsages[j] = maxCpuUsage
+			maxCpuUsagePercents[j] = maxCpuUsagePercent
 			maxMemUsages[j] = maxMemUsage
+			maxMemUsagePercents[j] = maxMemUsagePercent
 		}
 
 		runs[i-1] = &run{
 			Task1: &task{
-				MaxCpuUsagePercent: maxCpuUsages[0],
+				MaxCpuUsagePercent: maxCpuUsagePercents[0],
 				MaxMemUsage:        maxMemUsages[0],
+				MaxMemUsagePercent: maxMemUsagePercents[0],
 			},
 			Task2: &task{
-				MaxCpuUsagePercent: maxCpuUsages[1],
+				MaxCpuUsagePercent: maxCpuUsagePercents[1],
 				MaxMemUsage:        maxMemUsages[1],
+				MaxMemUsagePercent: maxMemUsagePercents[1],
 			},
 		}
 	}
@@ -109,19 +116,23 @@ func Parse(
 	return nil
 }
 
-func parseLine(line string) (float64, float64) {
-	if matches := cpuMemParseRegex.FindStringSubmatch(line); len(matches) == 3 {
+func parseLine(line string) (float64, float64, float64) {
+	if matches := cpuMemParseRegex.FindStringSubmatch(line); len(matches) == 4 {
 		cpuUsage, err := strconv.ParseFloat(matches[1], 64)
 		if err != nil {
-			return -1, -1
+			return -1, -1, -1
 		}
 		memUsage, err := strconv.ParseFloat(matches[2], 64)
 		if err != nil {
-			return -1, -1
+			return -1, -1, -1
 		}
-		return cpuUsage, memUsage
+		memUsagePercent, err := strconv.ParseFloat(matches[3], 64)
+		if err != nil {
+			return -1, -1, -1
+		}
+		return cpuUsage, memUsage, memUsagePercent
 	}
-	return -1, -1
+	return -1, -1, -1
 }
 
 func parseCpuPercentage(cpuOutput string) float64 {
@@ -173,7 +184,7 @@ func parseCpuPercentage(cpuOutput string) float64 {
 	return cpuPercent
 }
 
-func parseMemUsage(memOutput string) float64 {
+func parseMemUsage(memOutput string) (float64, float64) {
 	/*
 		sample output:
 		              total        used        free      shared  buff/cache   available
@@ -182,16 +193,18 @@ func parseMemUsage(memOutput string) float64 {
 	*/
 
 	if memOutput == "" {
-		return -1.0
+		return -1.0, -1.0
 	}
 
 	lines := strings.Split(memOutput, "\n")
 	if len(lines) == 0 {
-		return -1.0
+		return -1.0, -1.0
 	}
 
 	secondLine := lines[1]
 	fields := strings.Fields(secondLine)
+	totalMem, _ := strconv.ParseFloat(fields[1], 64)
 	memUsage, _ := strconv.ParseFloat(fields[2], 64)
-	return memUsage
+	memUsagePercent := (memUsage / totalMem) * 100.0
+	return memUsage, memUsagePercent
 }

@@ -65,6 +65,7 @@ func Start(
 		return nil, fmt.Errorf("failed to create cpu/mem trace file: %w", err)
 	}
 	writer := bufio.NewWriter(outFile)
+	writer.WriteString("cpu_percent,mem_usage,mem_percent\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -79,9 +80,9 @@ func Start(
 
 				memCmd := exec.Command("free", "-m")
 				memOutput, _ := memCmd.Output()
-				memUsage := parseMemUsage(string(memOutput))
+				memUsage, memUsagePercent := parseMemUsage(string(memOutput))
 
-				writer.WriteString(fmt.Sprintf("%f,%f\n", cpuPercent, memUsage))
+				writer.WriteString(fmt.Sprintf("%f,%f,%f\n", cpuPercent, memUsage, memUsagePercent))
 				time.Sleep(interval)
 			}
 		}
@@ -105,5 +106,5 @@ func Start(
 }
 
 func getCpuMemTraceOutPath(outDir string, testName string, testNum int, taskNum TaskNum) string {
-	return fmt.Sprintf("%s/%s_run_%d_task_%d.log", outDir, testName, testNum, taskNum+1)
+	return fmt.Sprintf("%s/%s_run_%d_task_%d.csv", outDir, testName, testNum, taskNum+1)
 }
