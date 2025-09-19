@@ -45,11 +45,11 @@ type task struct {
 
 var cpuMemParseRegex = regexp.MustCompile(`^(\d+\.\d+),(\d+\.\d+),(\d+\.\d+)$`)
 var prevIdleTime = -1.0
-var prevTotalTime = -1.0
+var prevNonIdleTime = -1.0
 
 func resetTimes() {
 	prevIdleTime = -1.0
-	prevTotalTime = -1.0
+	prevNonIdleTime = -1.0
 }
 
 func Parse(
@@ -164,23 +164,39 @@ func parseCpuPercentage(cpuOutput string) float64 {
 		return -1.0
 	}
 
+	// https://stackoverflow.com/questions/23367857/accurate-calculation-of-cpu-usage-given-in-percentage-in-linux
 	firstLine := lines[0][5:]
+	values := make([]float64, 10)
 	fields := strings.Fields(firstLine)
-	idleTime, _ := strconv.ParseFloat(fields[3], 64)
-	totalTime := 0.0
-	for _, field := range fields {
-		parsedTime, _ := strconv.ParseFloat(field, 64)
-		totalTime += parsedTime
+	for i := range 10 {
+		parsedVal, _ := strconv.ParseFloat(fields[i], 64)
+		values[i] = parsedVal
 	}
+	var (
+		user    = values[0]
+		nice    = values[1]
+		system  = values[2]
+		idle    = values[3]
+		iowait  = values[4]
+		iRQ     = values[5]
+		softIRQ = values[6]
+		steal   = values[7]
+		// guest     = values[8]
+		// guestNice = values[9]
+	)
 
 	cpuPercent := -1.0
-	if prevIdleTime != -1.0 && prevTotalTime != -1.0 {
-		deltaIdleTime := idleTime - prevIdleTime
-		deltaTotalTime := totalTime - prevTotalTime
-		cpuPercent = (1.0 - (float64(deltaIdleTime) / float64(deltaTotalTime))) * 100.0
+	idleTime := idle + iowait
+	nonIdleTime := user + nice + system + iRQ + softIRQ + steal
+	totalTime := idleTime + nonIdleTime
+	if prevIdleTime != -1.0 && prevNonIdleTime != -1.0 {
+		prevTotalTime := prevIdleTime + prevNonIdleTime
+		idleD := idleTime - prevIdleTime
+		totalD := totalTime - prevTotalTime
+		cpuPercent = ((totalD - idleD) / totalD) * 100.0
 	}
 	prevIdleTime = idleTime
-	prevTotalTime = totalTime
+	prevNonIdleTime = nonIdleTime
 	return cpuPercent
 }
 
