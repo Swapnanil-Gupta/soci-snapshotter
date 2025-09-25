@@ -46,7 +46,7 @@ func main() {
 		kernelTraceScriptOutDir string
 		cpuMemTraceOutDir       string
 		commit                  string
-		imageList               []benchmark.ImageDescriptor
+		imageList               []benchmark.ImageDescriptorWithSidecars
 		err                     error
 	)
 
@@ -103,9 +103,9 @@ func main() {
 	}
 
 	if jsonFile == "default" {
-		imageList = benchmark.GetDefaultWorkloads()
+		imageList = benchmark.GetDefaultWorkloadsWithSidecars()
 	} else {
-		imageList, err = benchmark.GetImageList(jsonFile)
+		imageList, err = benchmark.GetImageListWithSidecars(jsonFile)
 		if err != nil {
 			errMsg := fmt.Sprintf("Failed to read file %s with error:%v\n", jsonFile, err)
 			panic(errMsg)
@@ -133,13 +133,12 @@ func main() {
 			TestName:      testName,
 			NumberOfTests: numberOfTests,
 			TestFunction: func(b *testing.B, testNum int) {
-				benchmark.SociFullRun(
+				benchmark.SociFullRunWithSidecars(
 					ctx,
 					b,
 					testName,
 					testNum,
 					image,
-					traceKernelFileAccess,
 					traceCpuMemUsage,
 					cpuMemTraceIntervalMs,
 				)

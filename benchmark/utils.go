@@ -132,6 +132,82 @@ func GetCommitHash() (string, error) {
 func GetDefaultWorkloads() []ImageDescriptor {
 	return []ImageDescriptor{
 		{
+			ShortName:       "ECR-swpnlg-fio-seq-read",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:fio-stat",
+			SociIndexDigest: "sha256:78721dbb5a8190e781ea0b3fb72c9d04b00262bcb6d501f1ed3ec04dc97bcdb9",
+			ReadyLine:       "test complete",
+			TimeoutSec:      3600,
+			ImageOptions: ImageOptions{
+				Env: []string{"RW=read", "RUNS=5"},
+			},
+		},
+		{
+			ShortName:       "ECR-swpnlg-fio-rand-read",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:fio",
+			SociIndexDigest: "sha256:462a6fa1e3e0767687330807961c84a74388e268bfdc8dc26c2658d7c8666723",
+			ReadyLine:       "test complete",
+			TimeoutSec:      3600,
+			ImageOptions: ImageOptions{
+				Env: []string{"RW=randread", "RUNS=5"},
+			},
+		},
+		{
+			ShortName:       "ECR-swpnlg-find",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:find",
+			SociIndexDigest: "sha256:c6972a67c0e4686ec617288cf99e44433c6a9eb33a962b117faf7aae27366413",
+			ReadyLine:       "test complete",
+			TimeoutSec:      3600,
+		},
+		{
+			ShortName:       "ECR-swpnlg-sagemaker-lmi",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:sagemaker-lmi",
+			SociIndexDigest: "sha256:528c2a1e3975c0ebee71a5135ab36716b8f426b29020c3b7274e13aa41d914ed",
+			ReadyLine:       "DJL container invocations successful",
+			TimeoutSec:      1000,
+			ImageOptions: ImageOptions{
+				Net:     "host",
+				Gpu:     true,
+				ShmSize: 1200000,
+				Mounts: []runtimespec.Mount{
+					{
+						Source:      "/home/ec2-user/sagemaker-lmi/model",
+						Destination: "/opt/ml/model",
+						Type:        "bind",
+						Options:     []string{"rbind", "ro"},
+					},
+				},
+			},
+		},
+		{
+			ShortName:       "ECR-swpnlg-sagemaker-tgi",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:sagemaker-tgi",
+			SociIndexDigest: "sha256:8e48909461602aa9c3f15c32c542f1bdb1662ba65509776c99b82ad2d38ce1ff",
+			ReadyLine:       "DJL container invocations successful",
+			TimeoutSec:      1000,
+			ImageOptions: ImageOptions{
+				Net:     "host",
+				Gpu:     true,
+				ShmSize: 1200000,
+				Env: []string{
+					"HF_MODEL_ID=openlm-research/open_llama_7b_v2",
+					"SM_NUM_GPUS=4",
+					"MAX_BATCH_PREFILL_TOKENS=16384",
+				},
+			},
+		},
+		{
+			ShortName:       "ECR-swpnlg-codebuild-linux-kernel",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:codebuild-ubuntu-7.0-linux-kernel-compile",
+			SociIndexDigest: "sha256:2e0c3af0debac9218dad8bca41e6a450b0ae8cd3b5ef1ab85f488820611bb111",
+			ReadyLine:       "Compiled Linux Kernel",
+		},
+		{
+			ShortName:       "ECR-swpnlg-sentinel",
+			ImageRef:        "233720366202.dkr.ecr.us-west-2.amazonaws.com/soci-benchmarks:sentinel",
+			SociIndexDigest: "sha256:2e681062d33175c06bd097897b4af862d0041d1c6411545b3d185a979194e2a7",
+			ReadyLine:       "sentinel-test",
+		},
+		{
 			ShortName:       "ECR-public-ffmpeg",
 			ImageRef:        "public.ecr.aws/soci-workshop-examples/ffmpeg:latest",
 			SociIndexDigest: "sha256:ef63578971ebd8fc700c74c96f81dafab4f3875e9117ef3c5eb7446e169d91cb",
@@ -148,6 +224,9 @@ func GetDefaultWorkloads() []ImageDescriptor {
 			ImageRef:        "public.ecr.aws/soci-workshop-examples/tensorflow_gpu:latest",
 			SociIndexDigest: "sha256:a40b70bc941216cbb29623e98970dfc84e9640666a8b9043564ca79f6d5cc137",
 			ReadyLine:       "Hello World with TensorFlow!",
+			ImageOptions: ImageOptions{
+				Gpu: true,
+			},
 		},
 		{
 			ShortName:       "ECR-public-node",
@@ -180,5 +259,4 @@ func GetDefaultWorkloads() []ImageDescriptor {
 			ReadyLine:       "Ready to accept connections",
 		},
 	}
-
 }

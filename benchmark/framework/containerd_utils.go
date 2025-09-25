@@ -233,7 +233,7 @@ func (proc *ContainerdProcess) RunContainerTaskForReadyLine(
 	go func() {
 		for stderrScanner.Scan() {
 			nextLine := stderrScanner.Text()
-			fmt.Println("CONTAINER STDERR: " + nextLine)
+			fmt.Printf("CONTAINER STDERR (PID: %d): %s\n", taskDetails.task.Pid(), nextLine)
 			if strings.Contains(nextLine, readyLine) {
 				resultChannel <- "READYLINE_STDERR"
 				return
@@ -249,7 +249,7 @@ func (proc *ContainerdProcess) RunContainerTaskForReadyLine(
 	go func() {
 		for stdoutScanner.Scan() {
 			nextLine := stdoutScanner.Text()
-			fmt.Println("CONTAINER STDOUT: " + nextLine)
+			fmt.Printf("CONTAINER STDOUT (PID: %d): %s\n", taskDetails.task.Pid(), nextLine)
 			if strings.Contains(nextLine, readyLine) {
 				resultChannel <- "READYLINE_STDOUT"
 				return

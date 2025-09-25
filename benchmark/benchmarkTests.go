@@ -157,7 +157,6 @@ func SociFastPullFullRun(
 	log.G(ctx).WithField("benchmark", "Pull").WithField("event", "Stop").Infof("Stop Pull Image")
 	pullDuration := time.Since(pullStart)
 	b.ReportMetric(float64(pullDuration.Milliseconds()), "pullDuration")
-	b.ReportMetric(0, "unpackDuration")
 	if err != nil {
 		fatalf(b, "%s", err)
 	}
